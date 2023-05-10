@@ -104,62 +104,64 @@ struct Params {
 
 fn load_params() -> Params {
     let yaml = load_yaml!("../cli.yml");
-    let params = App::from_yaml(yaml).get_matches();
-        let fastq1 = params.value_of("fastq1").unwrap();
-        let fastq2 = params.value_of("fastq2").unwrap();
-        let output = params.value_of("output").unwrap_or("counts_mm.txt.gz");
-        let genome = params.value_of("genome").unwrap();
-        let bcs = params.value_of("barcodes_file").unwrap_or("/Users/sfurlan/develop/mutCaller/data/737K-august-2016.txt.gz");
-        let threads = params.value_of("threads").unwrap_or("1");
-        let threads = threads.to_string().parse::<usize>().unwrap();
-        let umi_len = params.value_of("umi_len").unwrap_or("10");
-        let umi_len = umi_len.to_string().parse::<u8>().unwrap();
-        let cb_len = params.value_of("cb_len").unwrap_or("16");
-        let cb_len = cb_len.to_string().parse::<u8>().unwrap();
-        let read_len = params.value_of("read_len").unwrap_or("90");
-        let read_len = read_len.to_string().parse::<usize>().unwrap();
-        let aligner = params.value_of("aligner").unwrap_or("mm2");
-        let variantstring = params.value_of("variants").unwrap();
-        let mut verbose = true;
-        if params.is_present("quiet") {
-                verbose = false
-        };
-        let mut keep = false;
-        if params.is_present("keep_files") {
-                keep = true
-        };
-        // let verbose = match params.value_of("verbose") {
-        //     Some(val) => println!("true"),
-        //     None => println!("false"),
-        // };
-        // let keep = match params.value_of("keep_files"){
-        //     Some(val) => println!("true"),
-        //     None => println!("false"),
-        // };
-        // let verbose = match params.value_of("verbose"){
-        //     Err(..) => panic!("Verbose flag not recognized"),
-        //     Ok(verbose) => verbose,
-        // };
-        // let keep = match params.value_of("keep_files"){
-        //     Err(..) => panic!("keep_files flag not recognized"),
-        //     Ok(verbose) => verbose,
-        // };
+    let matches = App::from_yaml(yaml).get_matches();
+    let mut verbose = true;
+    let params = matches.subcommand_matches("ALIGNED").unwrap();
+    let fastq1 = params.value_of("fastq1").unwrap();
+    let fastq2 = params.value_of("fastq2").unwrap();
+    let output = params.value_of("output").unwrap_or("counts_mm.txt.gz");
+    let genome = params.value_of("genome").unwrap();
+    let bcs = params.value_of("barcodes_file").unwrap_or("/Users/sfurlan/develop/mutCaller/data/737K-august-2016.txt.gz");
+    let threads = params.value_of("threads").unwrap_or("1");
+    let threads = threads.to_string().parse::<usize>().unwrap();
+    let umi_len = params.value_of("umi_len").unwrap_or("10");
+    let umi_len = umi_len.to_string().parse::<u8>().unwrap();
+    let cb_len = params.value_of("cb_len").unwrap_or("16");
+    let cb_len = cb_len.to_string().parse::<u8>().unwrap();
+    let read_len = params.value_of("read_len").unwrap_or("90");
+    let read_len = read_len.to_string().parse::<usize>().unwrap();
+    let aligner = params.value_of("aligner").unwrap_or("mm2");
+    let variantstring = params.value_of("variants").unwrap();
+    let mut verbose = true;
+    if params.is_present("quiet") {
+            verbose = false
+    };
+    let mut keep = false;
+    if params.is_present("keep_files") {
+            keep = true
+    };
+    // let verbose = match params.value_of("verbose") {
+    //     Some(val) => println!("true"),
+    //     None => println!("false"),
+    // };
+    // let keep = match params.value_of("keep_files"){
+    //     Some(val) => println!("true"),
+    //     None => println!("false"),
+    // };
+    // let verbose = match params.value_of("verbose"){
+    //     Err(..) => panic!("Verbose flag not recognized"),
+    //     Ok(verbose) => verbose,
+    // };
+    // let keep = match params.value_of("keep_files"){
+    //     Err(..) => panic!("keep_files flag not recognized"),
+    //     Ok(verbose) => verbose,
+    // };
 
-        Params{
-            fastq1: fastq1.to_string(),
-            fastq2: fastq2.to_string(),
-            genome: genome.to_string(),
-            output: output.to_string(),
-            bcs: bcs.to_string(),
-            threads: threads as usize,
-            umi_len: umi_len as usize,
-            cb_len: cb_len as usize,
-            aligner: aligner.to_string(),
-            variants: variantstring.to_string(),
-            read_len: read_len as usize,
-            keep: keep,
-            verbose: verbose,
-        }
+    Params{
+        fastq1: fastq1.to_string(),
+        fastq2: fastq2.to_string(),
+        genome: genome.to_string(),
+        output: output.to_string(),
+        bcs: bcs.to_string(),
+        threads: threads as usize,
+        umi_len: umi_len as usize,
+        cb_len: cb_len as usize,
+        aligner: aligner.to_string(),
+        variants: variantstring.to_string(),
+        read_len: read_len as usize,
+        keep: keep,
+        verbose: verbose,
+    }
 }
 
 
