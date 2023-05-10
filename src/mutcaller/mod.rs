@@ -106,7 +106,7 @@ fn load_params() -> Params {
     let yaml = load_yaml!("../cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
     let mut verbose = true;
-    let params = matches.subcommand_matches("ALIGNED").unwrap();
+    let params = matches.subcommand_matches("UNALIGNED").unwrap();
     let fastq1 = params.value_of("fastq1").unwrap();
     let fastq2 = params.value_of("fastq2").unwrap();
     let output = params.value_of("output").unwrap_or("counts_mm.txt.gz");
