@@ -1,0 +1,149 @@
+name: mutcaller
+version: "0.3.0"
+author: Scott Furlan
+about: Single nucleotide variant counting pipeline for single cell genomics data
+subcommands:
+    - ALIGNED:
+        name: "ALIGNED"
+        about: "Count variants in previously aligned data"
+        args:
+            - bam:
+                long: bam
+                short: b
+                takes_value: true
+                required: true
+                help: input bam
+            - outfile:
+                long: outfile
+                short: o
+                takes_value: true
+                required: false
+                help: name of output file; will be gz compressed text file of output; default = "counts.txt.gz"
+            - threads:
+                long: threads
+                short: t
+                takes_value: true
+                required: false
+                help: threads
+            - method:
+                short: m
+                help: method to process using 'header' or 'tag'; default is 'header'
+                takes_value: true
+                required: false
+            - stringsep:
+                short: s
+                help: character to parse header; default is ';'
+                takes_value: true
+                required: false
+            - cbsep:
+                short: c
+                help: character to parse cell barcode; default = 'XC='
+                takes_value: true
+                required: false
+            - umisep:
+                short: u
+                help: character to parse umi; default = 'XM='
+                takes_value: true
+                required: false
+            - sampleheader:
+                short: w
+                help: location of an optional string in header to return in output
+                takes_value: true
+                required: false
+            - returnseq:
+                short: r
+                help: return sequence
+                takes_value: false
+                required: false
+            - cbpos:
+                short: p
+                help: position of cb in header; default is 6 (not zero indexed)
+                takes_value: true
+                required: false
+            - umipos:
+                short: q
+                help: position of umi in header; default is 5 (not zero indexed)
+                takes_value: true
+                required: false
+    - UNALIGNED:
+        name: "UNALIGNED"
+        about: "Count variants after aligning data using minimap2"
+        args:
+            - fastq1:
+                long: fastq1
+                short: i
+                takes_value: true
+                required: true
+                help: input fastq with barcodes
+            - fastq2:
+                long: fastq2
+                short: j
+                takes_value: true
+                required: true
+                help: input fastq with read
+            - genome:
+                long: genome
+                short: g
+                takes_value: true
+                required: true
+                help: fasta for minimap2 or transcriptome index for kallisto
+            - variants:
+                long: variants
+                short: v
+                takes_value: true
+                required: true
+                help: path to variants.tsv file (SNVs with mm2 only supported currently) with the following formatting per line - seqname\tstart\tref_nt\tquery_nt\tname; e.g. chr12,112450407,A,G,PTPN11_227A>G
+            - barcodes_file:
+                long: barcodes_file
+                short: b
+                takes_value: true
+                required: true
+                help: barcodes_file
+            - output:
+                long: output
+                short: o
+                takes_value: true
+                required: false
+                help: output filename for compressed counts (defaults to counts_mm.txt.gz)
+            - threads:
+                long: threads
+                short: t
+                takes_value: true
+                required: false
+                help: threads
+            - cb_len:
+                long: cb_length
+                short: c
+                takes_value: true
+                required: false
+                help: length of umi sequence
+            - umi_len:
+                long: umi_length
+                short: u
+                takes_value: true
+                required: false
+                help: length of umi sequence
+            - aligner:
+                long: aligner
+                short: a
+                takes_value: true
+                required: false
+                help: aligner software - currently mm2 (default) and kallisto are supported
+            - read_len:
+                long: read_len
+                short: r
+                takes_value: true
+                required: false
+                help: read 2 length (default 90)
+            - keep_files:
+                long: keep_files
+                short: k
+                takes_value: false
+                required: false
+                help: use this flag to keep files (default is remove intermediate files)
+            - verbose:
+                long: quiet
+                short: q
+                takes_value: false
+                required: false
+                help: use this flag to run in quiet mode (no verbosity)

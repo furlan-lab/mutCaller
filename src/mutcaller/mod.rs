@@ -46,7 +46,8 @@ use fastq::parse_path;
 use fastq::each_zipped;
 use simple_log::LogConfigBuilder;
 use fastq::RefRecord;
-use crate::fastq::Record;
+use crate::mutcaller::fastq::Record;
+// use crate::fastq::Record;
 // use std::ffi::OsStr;
 use flate2::{read};
 use std::process::{Command, Stdio};
@@ -102,7 +103,7 @@ struct Params {
 
 
 fn load_params() -> Params {
-    let yaml = load_yaml!("params_mutcaller.yml");
+    let yaml = load_yaml!("../cli.yml");
     let params = App::from_yaml(yaml).get_matches();
         let fastq1 = params.value_of("fastq1").unwrap();
         let fastq2 = params.value_of("fastq2").unwrap();
@@ -195,7 +196,7 @@ fn read_csv(params: &Params) -> Result<Vec<Variant>, Box<dyn Error>> {
 
 
 
-fn main() {
+pub fn mutcaller_run() {
     let config = LogConfigBuilder::builder()
         .path("./mutcaller.log")
         .size(1 * 100)

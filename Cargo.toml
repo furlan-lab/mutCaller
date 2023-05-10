@@ -1,6 +1,6 @@
 [package]
 name = "mutcaller_rust"
-version = "0.1.0"
+version = "0.3.0"
 edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -20,8 +20,6 @@ itertools = "0.10.0"
 
 [[bin]]
 name = "mutcaller"
-path = "src/mutcaller.rs"
+path = "src/main.rs"
 
-[[bin]]
-name = "countbam"
-path = "src/countbam.rs"
+

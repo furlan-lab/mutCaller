@@ -9,6 +9,12 @@ args:
         takes_value: true
         required: true
         help: input bam
+    - outfile:
+        long: outfile
+        short: o
+        takes_value: true
+        required: false
+        help: name of output file; will be gz compressed text file of output; default = "counts.txt.gz"
     - threads:
         long: threads
         short: t
