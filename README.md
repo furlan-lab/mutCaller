@@ -32,7 +32,7 @@ To install mutCaller:
 
 First users will generate a simple, headerless 'variants_file' that lists the variants to be counted (tsv.file). The alleles_file should look something like this:
 
-```sh
+```plaintext
 seqname\tstart\tref_nt\tquery_nt\tname
 ```
 **More detailed explanation:**
@@ -44,7 +44,7 @@ seqname\tstart\tref_nt\tquery_nt\tname
 
 **three full lines should look something like this**
 
-```sh
+```plaintext
 chr12   112450407   A   G   PTPN11_227A>G
 chr12   208248389   G   A   IDH1_132G>A
 chr17   7674220 C   T   TP53_248C>T
@@ -59,7 +59,7 @@ A barcode whitelist.  v3 3prime and v2 5prime 10X whitelists are provided in the
 
 **To run mutCaller simply type:**
 
-```sh
+```plaintext
 mutCaller ALIGNED --bam <file.bam> -a <variants.tsv> -o <folder>
 mutCaller UNALIGNED --barcodes_file <barcodes_file> --fastq1 <fastq1> --fastq2 <fastq2> --genome <genome> --variants <variants.tsv>
 ```
@@ -67,7 +67,7 @@ mutCaller UNALIGNED --barcodes_file <barcodes_file> --fastq1 <fastq1> --fastq2 <
 
 ##### Help menu
 
-```sh
+```plaintext
 mutcaller 0.3.0
 Scott Furlan
 Single nucleotide variant counting pipeline for single cell genomics data
@@ -86,7 +86,7 @@ SUBCOMMANDS:
 ```
 
 ALIGNED help
-```sh
+```plaintext
 
 mutcaller-ALIGNED
 Count variants in previously aligned data
@@ -115,7 +115,7 @@ OPTIONS:
 
 UNALIGNED help
 
-```sh
+```plaintext
 mutcaller-UNALIGNED
 Count variants after aligning data using minimap2
 
