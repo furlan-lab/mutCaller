@@ -30,7 +30,7 @@ To install mutCaller:
 
 ##### Variants File.
 
-First users will generate a simple, headerless 'variants_file' that lists the variants to be counted (tsv.file). The alleles_file should look something like this:
+First users will generate a simple, 'variants_file' that lists the variants to be counted (tsv.file). The variants file should look something like this:
 
 ```plaintext
 seqname\tstart\tref_nt\tquery_nt\tname
@@ -45,6 +45,7 @@ seqname\tstart\tref_nt\tquery_nt\tname
 **three full lines should look something like this**
 
 ```plaintext
+seq     start  ref_nt query_nt name
 chr12   112450407   A   G   PTPN11_227A>G
 chr12   208248389   G   A   IDH1_132G>A
 chr17   7674220 C   T   TP53_248C>T
@@ -60,7 +61,7 @@ A barcode whitelist.  v3 3prime and v2 5prime 10X whitelists are provided in the
 **To run mutCaller simply type:**
 
 ```plaintext
-mutCaller ALIGNED --bam <file.bam> -a <variants.tsv> -o <folder>
+mutCaller ALIGNED --bam <file.bam> -v <variants.tsv> -o <folder>
 mutCaller UNALIGNED --barcodes_file <barcodes_file> --fastq1 <fastq1> --fastq2 <fastq2> --genome <genome> --variants <variants.tsv>
 ```
 
