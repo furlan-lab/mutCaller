@@ -12,59 +12,44 @@ subcommands:
                 short: b
                 takes_value: true
                 required: true
-                help: input bam
-            - outfile:
-                long: outfile
+                help: aligned bam file with cell barcode and umi in tags
+            - variants:
+                long: variants
+                short: v
+                takes_value: true
+                required: true
+                help: path to variants.tsv file (SNVs with mm2 only supported currently) with the following formatting per line - seqname\tstart\tref_nt\tquery_nt\tname; e.g. chr12,112450407,A,G,PTPN11_227A>G
+            - output:
+                long: output
                 short: o
                 takes_value: true
                 required: false
-                help: name of output file; will be gz compressed text file of output; default = "counts.txt.gz"
+                help: output filename for compressed counts (defaults to counts_mm.txt.gz)
             - threads:
                 long: threads
                 short: t
                 takes_value: true
                 required: false
                 help: threads
-            - method:
-                short: m
-                help: method to process using 'header' or 'tag'; default is 'header'
-                takes_value: true
-                required: false
-            - stringsep:
-                short: s
-                help: character to parse header; default is ';'
-                takes_value: true
-                required: false
-            - cbsep:
+            - cb:
+                long: cb_tag
                 short: c
-                help: character to parse cell barcode; default = 'XC='
+                help: bam tag containing cell barcode; default = 'CB'
                 takes_value: true
                 required: false
-            - umisep:
+            - umi:
+                long: umi_tag
                 short: u
-                help: character to parse umi; default = 'XM='
+                help: bam tag containing umi; default = 'XM'
                 takes_value: true
                 required: false
-            - sampleheader:
-                short: w
-                help: location of an optional string in header to return in output
-                takes_value: true
-                required: false
-            - returnseq:
-                short: r
-                help: return sequence
+            - verbose:
+                long: quiet
+                short: q
                 takes_value: false
                 required: false
-            - cbpos:
-                short: p
-                help: position of cb in header; default is 6 (not zero indexed)
-                takes_value: true
-                required: false
-            - umipos:
-                short: q
-                help: position of umi in header; default is 5 (not zero indexed)
-                takes_value: true
-                required: false
+                help: use this flag to run in quiet mode (no verbosity)
+
     - UNALIGNED:
         name: "UNALIGNED"
         about: "Count variants after aligning data using minimap2"

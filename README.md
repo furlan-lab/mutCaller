@@ -92,24 +92,22 @@ mutcaller-ALIGNED
 Count variants in previously aligned data
 
 USAGE:
-    mutcaller ALIGNED [FLAGS] [OPTIONS] --bam <bam>
+    mutcaller ALIGNED [FLAGS] [OPTIONS] --bam <bam> --variants <variants>
 
 FLAGS:
     -h, --help       Prints help information
-    -r               return sequence
     -V, --version    Prints version information
+    -q, --quiet      use this flag to run in quiet mode (no verbosity)
 
 OPTIONS:
-    -b, --bam <bam>            input bam
-    -p <cbpos>                 position of cb in header; default is 6 (not zero indexed)
-    -c <cbsep>                 character to parse cell barcode; default = 'XC='
-    -m <method>                method to process using 'header' or 'tag'; default is 'header'
-    -o, --outfile <outfile>    name of output file; will be gz compressed text file of output; default = "counts.txt.gz"
-    -w <sampleheader>          location of an optional string in header to return in output
-    -s <stringsep>             character to parse header; default is ';'
-    -t, --threads <threads>    threads
-    -q <umipos>                position of umi in header; default is 5 (not zero indexed)
-    -u <umisep>                character to parse umi; default = 'XM='
+    -b, --bam <bam>              aligned bam file with cell barcode and umi in tags
+    -c, --cb_tag <cb>            bam tag containing cell barcode; default = 'CB'
+    -o, --output <output>        output filename for compressed counts (defaults to counts_mm.txt.gz)
+    -t, --threads <threads>      threads
+    -u, --umi_tag <umi>          bam tag containing umi; default = 'XM'
+    -v, --variants <variants>    path to variants.tsv file (SNVs with mm2 only supported currently) with the following
+                                 formatting per line - seqname\tstart\tref_nt\tquery_nt\tname; e.g.
+                                 chr12,112450407,A,G,PTPN11_227A>G
 
 ```
 
