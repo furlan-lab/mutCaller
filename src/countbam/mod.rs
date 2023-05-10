@@ -97,28 +97,43 @@ struct Params {
 
 fn load_params() -> Params {
     let yaml = load_yaml!("../cli.yml");
-    let params = App::from_yaml(yaml).get_matches();
-        let bam = params.value_of("bam").unwrap();
-        let output = params.value_of("output").unwrap_or("counts_mm.txt.gz");
-        let threads = params.value_of("threads").unwrap_or("1");
-        let threads = threads.to_string().parse::<usize>().unwrap();
-        let variantstring = params.value_of("variants").unwrap();
-        let mut verbose = true;
-        if params.is_present("quiet") {
-                verbose = false
-        };
-        let cb_tag = params.value_of("cb").unwrap_or("CB").to_string();
-        let umi_tag = params.value_of("umi").unwrap_or("XM").to_string();
+    let matches = App::from_yaml(yaml).get_matches();
+    let mut verbose = true;
+    let countbam_params = matches.subcommand_matches("ALIGNED").unwrap();
+    let bam = countbam_params.value_of("bam").unwrap();
+    let output = countbam_params.value_of("output").unwrap_or("counts_mm.txt.gz");
+    let threads = countbam_params.value_of("threads").unwrap_or("1");
+    let threads = threads.to_string().parse::<usize>().unwrap();
+    // let variantstring = countbam_params.value_of("variants").unwrap_or("/Users/sfurlan/develop/mutCaller/tests/variants.tsv");
+    let variantstring = countbam_params.value_of("variants").unwrap();
+    if countbam_params.is_present("quiet") {
+            verbose = false
+    };
+    let cb_tag = countbam_params.value_of("cb").unwrap_or("CB").to_string();
+    let umi_tag = countbam_params.value_of("umi").unwrap_or("XM").to_string();
+    Params{
+        bam: bam.to_string(),
+        output: output.to_string(),
+        threads: threads as usize,
+        variants: variantstring.to_string(),
+        verbose: verbose,
+        cb_tag: cb_tag,
+        umi_tag: umi_tag,
+    }
+    // eprintln!("params inside module: {:?}", countbam_params);
+    // let bam = countbam_params.value_of("bam").unwrap_or("aln_sncr_fc_Malig.bam");
+    // let bam = countbam_params.value_of("bam").unwrap();
+    // let output = countbam_params.value_of("output").unwrap_or("counts_mm.txt.gz");
+    // let threads = countbam_params.value_of("threads").unwrap_or("1");
+    // let threads = threads.to_string().parse::<usize>().unwrap();
+    // // let variantstring = countbam_params.value_of("variants").unwrap_or("/Users/sfurlan/develop/mutCaller/tests/variants.tsv");
+    // let variantstring = countbam_params.value_of("variants").unwrap();
+    // if countbam_params.is_present("quiet") {
+    //         verbose = false
+    // };
+    // let cb_tag = countbam_params.value_of("cb").unwrap_or("CB").to_string();
+    // let umi_tag = countbam_params.value_of("umi").unwrap_or("XM").to_string();
 
-        Params{
-            bam: bam.to_string(),
-            output: output.to_string(),
-            threads: threads as usize,
-            variants: variantstring.to_string(),
-            verbose: verbose,
-            cb_tag: cb_tag,
-            umi_tag: umi_tag,
-        }
 }
 
 

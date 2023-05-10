@@ -49,7 +49,6 @@ subcommands:
                 takes_value: false
                 required: false
                 help: use this flag to run in quiet mode (no verbosity)
-
     - UNALIGNED:
         name: "UNALIGNED"
         about: "Count variants after aligning data using minimap2"
@@ -132,3 +131,4 @@ subcommands:
                 takes_value: false
                 required: false
                 help: use this flag to run in quiet mode (no verbosity)
+after_help: "Note: this is a work in progress. Use with caution."
