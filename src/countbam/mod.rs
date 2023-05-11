@@ -3,9 +3,9 @@
 
 Full pipeline in 1 command...
 
-cd ~/develop/mutCaller/tests
+cd ~/develop/mutCaller
 cargo build --release
-../target/release/mutcaller --help
+target/release/mutcaller --help
 
 bc=~/develop/mutCaller/data/737K-august-2016.txt.gz
 
@@ -15,6 +15,12 @@ fa=/fh/fast/furlan_s/grp/refs/GRCh38/refdata-gex-GRCh38-2020-A/fasta/genome.fa
                         -t 8 -g $fa -b $bc -v variants.tsv \
                         --fastq1 sequencer_R1.fastq.gz \
                         --fastq2 sequencer_R2.fastq.gz
+
+
+
+cd /fh/scratch/delete90/furlan_s/targ_reseq/230117_Sami/AML_1101_merge/align_nodedup
+~/develop/mutCaller/target/release/mutcaller ALIGNED -b aln_sncr_fc_Malig.mdtag.bam -v ~/develop/mutCaller/tests/variants.tsv
+
 
 
 */
@@ -36,21 +42,21 @@ use serde::Deserialize;
 use std::fmt; 
 use csv::ReaderBuilder;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{Write, BufReader};
 use itertools::Itertools;
 use flate2::GzBuilder;
 use flate2::Compression;
 use simple_log::info;
-use std::path::Path;
+// use std::path::Path;
 // use fastq::parse_path;
 // use fastq::each_zipped;
 use simple_log::LogConfigBuilder;
-use bam::record::tags::TagValue;
+// use bam::record::tags::TagValue;
 // use crate::fastq::Record;
 // use std::ffi::OsStr;
-use flate2::{read};
+// use flate2::{read};
 // use std::process::{Command, Stdio};
-use std::ffi::OsStr;
+// use std::ffi::OsStr;
 // use std::fs;
 
 
@@ -98,7 +104,7 @@ struct Params {
 fn load_params() -> Params {
     let yaml = load_yaml!("../cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
-    let mut verbose = true;
+    let mut _verbose = true;
     let countbam_params = matches.subcommand_matches("ALIGNED").unwrap();
     let bam = countbam_params.value_of("bam").unwrap();
     let output = countbam_params.value_of("output").unwrap_or("counts_mm.txt.gz");
@@ -107,7 +113,7 @@ fn load_params() -> Params {
     // let variantstring = countbam_params.value_of("variants").unwrap_or("/Users/sfurlan/develop/mutCaller/tests/variants.tsv");
     let variantstring = countbam_params.value_of("variants").unwrap();
     if countbam_params.is_present("quiet") {
-            verbose = false
+            _verbose = false
     };
     let cb_tag = countbam_params.value_of("cb").unwrap_or("CB").to_string();
     let umi_tag = countbam_params.value_of("umi").unwrap_or("XM").to_string();
@@ -116,7 +122,7 @@ fn load_params() -> Params {
         output: output.to_string(),
         threads: threads as usize,
         variants: variantstring.to_string(),
-        verbose: verbose,
+        verbose: _verbose,
         cb_tag: cb_tag,
         umi_tag: umi_tag,
     }
@@ -186,10 +192,10 @@ pub fn countbam_run() {
 
     let params = load_params();
         if params.verbose {
-        eprintln!("\n\n\n\nParsing Parameters!\n");
+        eprintln!("\n\nParsing Parameters!\n");
     }
     if params.verbose {
-        eprintln!("\n\n\n\nParsing variants!\n");
+        eprintln!("\n\nParsing variants!\n");
     }
     let csvdata = read_csv(&params).unwrap();
     
@@ -199,7 +205,7 @@ pub fn countbam_run() {
         }
     }
     if params.verbose {
-        eprintln!("\n\n\n\nRunning with {} thread(s)!\n", &params.threads);
+        eprintln!("\n\nRunning with {} thread(s)!\n", &params.threads);
         // eprintln!("Params: {:?} ", &params);
     }
 
@@ -222,9 +228,9 @@ pub fn countbam_run() {
 
 
 fn writer_fn (count_vec: Vec<Vec<Vec<u8>>>, fname: String) -> Result<(), Box<dyn Error>> {
-        let f = File::create(fname)?;
+        let f = File::create(&fname)?;
         let mut gz = GzBuilder::new()
-                        .filename("counts_mm.txt.gz")
+                        .filename(fname)
                         .write(f, Compression::default());
         for result in count_vec {
             for line in result {
@@ -247,6 +253,10 @@ fn writer_fn (count_vec: Vec<Vec<Vec<u8>>>, fname: String) -> Result<(), Box<dyn
 fn process_variant(ref_id: u32, start: u32)->bam::Region{
     let region = bam::Region::new(ref_id,start - 1,start - 1);
     return region;
+}
+
+fn string_pop(slice: &[u8]) -> &[u8; 2] {
+    slice.try_into().expect("slice with incorrect length")
 }
 
 
@@ -272,19 +282,18 @@ fn count_variants_mm2(params: &Params, variant: Variant) -> Vec<Vec<u8>>{
     }
     // let mut cb = "NULL".to_string().as_bytes().to_vec();
     // let mut umi = "NULL".to_string().as_bytes().to_vec();
-    let mut cb = "NULL".to_string();
-    let mut umi = "NULL".to_string();
+    let mut _cb = "NULL".to_string();
+    let mut _umi = "NULL".to_string();
     let mut data = Vec::new();
     let ref_id = seqnames.iter().position(|&r| r == &seqname).unwrap();
     let region = process_variant(ref_id as u32, start);
+    let cb_tag_b = string_pop(params.cb_tag.as_bytes());
+    let umi_tag_b = string_pop(params.umi_tag.as_bytes());
     for record in reader.fetch_by(&&region, |record| record.mapq() >= 4 && (record.flag().all_bits(0 as u16) || record.flag().all_bits(16 as u16))).unwrap(){
         total+=1;
-        match record.as_ref().unwrap().tags().get(b"CB") {
-            // Some(TagValue::String(array_view, _)) => {
-            //     cb = array_view.to_vec();
-            // },
-            Some(TagValue::Char(value)) => {
-                cb= value.to_string();
+        match record.as_ref().unwrap().tags().get(cb_tag_b) {
+            Some( bam::record::tags::TagValue::String(cba, _)) => {
+                _cb = str::from_utf8(&cba).unwrap().to_string();
             },
             _ => {
                 // eprintln!("ERROR: 'CB' not found");
@@ -292,12 +301,9 @@ fn count_variants_mm2(params: &Params, variant: Variant) -> Vec<Vec<u8>>{
                 continue
             }
         }
-        match record.as_ref().unwrap().tags().get(b"XM") {
-            // Some(TagValue::String(array_view, _)) => {
-            //     umi = array_view.to_vec();
-            // },
-            Some(TagValue::Char(value)) => {
-                umi= value.to_string();
+        match record.as_ref().unwrap().tags().get(umi_tag_b) {
+            Some( bam::record::tags::TagValue::String(uma, _)) => {
+                _umi = str::from_utf8(&uma).unwrap().to_string();
             },
             _ => {
                 // eprintln!("ERROR: 'CB' not found");
@@ -305,6 +311,7 @@ fn count_variants_mm2(params: &Params, variant: Variant) -> Vec<Vec<u8>>{
                 continue
             }
         }
+        // eprintln!("{:?}", record);
         for entry in record.as_ref().unwrap().alignment_entries().unwrap() {
             if let Some((ref_pos, ref_nt)) = entry.ref_pos_nt() {
                 if region.start() == ref_pos {
@@ -316,7 +323,7 @@ fn count_variants_mm2(params: &Params, variant: Variant) -> Vec<Vec<u8>>{
                         } else {
                             _result = "other";
                         }
-                            data.push(format!("{} {} {} {} {} {}", cb, umi, seqname, ref_pos, vname, _result))
+                            data.push(format!("{} {} {} {} {} {}", _cb, _umi, seqname, ref_pos, vname, _result))
                         }
                     } else {
                         continue

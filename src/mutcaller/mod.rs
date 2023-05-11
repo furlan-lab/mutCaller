@@ -105,7 +105,6 @@ struct Params {
 fn load_params() -> Params {
     let yaml = load_yaml!("../cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
-    let mut verbose = true;
     let params = matches.subcommand_matches("UNALIGNED").unwrap();
     let fastq1 = params.value_of("fastq1").unwrap();
     let fastq2 = params.value_of("fastq2").unwrap();
@@ -122,9 +121,9 @@ fn load_params() -> Params {
     let read_len = read_len.to_string().parse::<usize>().unwrap();
     let aligner = params.value_of("aligner").unwrap_or("mm2");
     let variantstring = params.value_of("variants").unwrap();
-    let mut verbose = true;
+    let mut _verbose = true;
     if params.is_present("quiet") {
-            verbose = false
+            _verbose = false
     };
     let mut keep = false;
     if params.is_present("keep_files") {
@@ -160,7 +159,7 @@ fn load_params() -> Params {
         variants: variantstring.to_string(),
         read_len: read_len as usize,
         keep: keep,
-        verbose: verbose,
+        verbose: _verbose,
     }
 }
 

@@ -14,12 +14,12 @@ fn main() {
 
     let yaml = load_yaml!("cli.yml");
     let params = App::from_yaml(yaml).get_matches();
-    if let Some(params) = params.subcommand_matches("UNALIGNED") {
-    	eprintln!("Running unaligned with params: {:?}", params);
+    if let Some(_params) = params.subcommand_matches("UNALIGNED") {
+    	// eprintln!("Running unaligned with params: {:?}", params);
     	mutcaller_run();
 	}
-	if let Some(params) = params.subcommand_matches("ALIGNED") {
-    	eprintln!("Running aligned with params: {:?}", params);
+	if let Some(_params) = params.subcommand_matches("ALIGNED") {
+    	// eprintln!("Running aligned with params: {:?}", params);
     	countbam_run()
 	}
 
