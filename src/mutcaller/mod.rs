@@ -588,7 +588,7 @@ fn process_variant(ref_id: u32, start: u32)->bam::Region{
     return region;
 }
 
-
+#[allow(unused_comparisons)]
 fn count_variants_mm2(params: &Params, variant: Variant) -> Vec<Vec<u8>>{
     // eprintln!("Processing using cb and umi in header");
     let split = "|BARCODE=".to_string();
