@@ -38,10 +38,7 @@ samtools index -@ 24 Aligned.out.tagged.sorted.bam
 # rm -R mutcaller
 
 
-*/
-
-
-*/
+**/
 
 extern crate simplelog;
 extern crate csv;
