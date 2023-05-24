@@ -11,10 +11,28 @@ bc=~/develop/mutCaller/data/737K-august-2016.txt.gz
 
 fa=/Users/sfurlan/refs/genome.fa
 fa=/fh/fast/furlan_s/grp/refs/GRCh38/refdata-gex-GRCh38-2020-A/fasta/genome.fa
-../target/release/mutcaller \
+../target/release/mutcaller UNALIGNED \
                         -t 8 -g $fa -b $bc -v variants.tsv \
                         --fastq1 sequencer_R1.fastq.gz \
                         --fastq2 sequencer_R2.fastq.gz
+
+
+###compare to cbsniffer
+mkdir cbsniffer
+cd cbsniffer
+../../src/archive/mutcaller -u -U 10 -b /Users/sfurlan/develop/mutCaller/tests/sequencer_R1.fastq.gz -t /Users/sfurlan/develop/mutCaller/tests/sequencer_R2.fastq.gz -l $bc &&
+export fq2=$OUT/fastq_processed/sample_filtered.fastq &&
+export fq3=$OUT/fastq_processed/sample_filtered_header.fastq &&
+~/develop/mutCaller/mutcaller_rust/target/debug/fastq -t 1 --ifastq ${fq2} > ${fq3}
+/app/software/CellRanger/6.0.1/lib/bin/STAR --genomeDir $transcriptome/star --readFilesIn ${fq3} --readNameSeparator space \
+  --runThreadN 24 --outSAMunmapped Within KeepPairs --outSAMtype BAM SortedByCoordinate &&
+Rscript ~/develop/mutCaller/scripts/quantReads.R &&
+~/develop/mutCaller/addTags.py -u 10 -c 16 Aligned.sortedByCoord.out.bam | samtools view -hbo Aligned.out.tagged.sorted.bam &&
+samtools index -@ 24 Aligned.out.tagged.sorted.bam
+# rm Aligned.sortedByCoord.out.bam &&
+# rm fastq.log Log.out Log.progress.out r1.fq.gz r2.fq.gz SJ.out.tab slurm* &&
+# rm -R fastq_processed &&
+# rm -R mutcaller
 
 
 */
