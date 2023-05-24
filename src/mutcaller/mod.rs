@@ -11,15 +11,35 @@ bc=~/develop/mutCaller/data/737K-august-2016.txt.gz
 
 fa=/Users/sfurlan/refs/genome.fa
 fa=/fh/fast/furlan_s/grp/refs/GRCh38/refdata-gex-GRCh38-2020-A/fasta/genome.fa
-../target/release/mutcaller \
-                        -t 8 -g $fa -b $bc -v variants.tsv \
+ml minimap2/2.24-GCCcore-11.2.0
+ml SAMtools/1.17-GCC-12.2.0
+../target/release/mutcaller UNALIGNED \
+                        -t 8 -g $fa -b $bc -v variants.tsv -o out_mutcaller \
                         --fastq1 sequencer_R1.fastq.gz \
                         --fastq2 sequencer_R2.fastq.gz
 
 
+###compare to cbsniffer
+mkdir cbsniffer
+cd cbsniffer
+../../src/archive/mutcaller -u -U 10 -b /Users/sfurlan/develop/mutCaller/tests/sequencer_R1.fastq.gz -t /Users/sfurlan/develop/mutCaller/tests/sequencer_R2.fastq.gz -l $bc &&
+export fq2=$OUT/fastq_processed/sample_filtered.fastq &&
+export fq3=$OUT/fastq_processed/sample_filtered_header.fastq &&
+~/develop/mutCaller/mutcaller_rust/target/debug/fastq -t 1 --ifastq ${fq2} > ${fq3}
+/app/software/CellRanger/6.0.1/lib/bin/STAR --genomeDir $transcriptome/star --readFilesIn ${fq3} --readNameSeparator space \
+  --runThreadN 24 --outSAMunmapped Within KeepPairs --outSAMtype BAM SortedByCoordinate &&
+Rscript ~/develop/mutCaller/scripts/quantReads.R &&
+~/develop/mutCaller/addTags.py -u 10 -c 16 Aligned.sortedByCoord.out.bam | samtools view -hbo Aligned.out.tagged.sorted.bam &&
+samtools index -@ 24 Aligned.out.tagged.sorted.bam
+# rm Aligned.sortedByCoord.out.bam &&
+# rm fastq.log Log.out Log.progress.out r1.fq.gz r2.fq.gz SJ.out.tab slurm* &&
+# rm -R fastq_processed &&
+# rm -R mutcaller
+
+
 */
 
-
+extern crate simplelog;
 extern crate csv;
 extern crate clap;
 extern crate bam;
@@ -44,7 +64,7 @@ use simple_log::info;
 use std::path::Path;
 use fastq::parse_path;
 use fastq::each_zipped;
-use simple_log::LogConfigBuilder;
+// use simple_log::LogConfigBuilder;
 use fastq::RefRecord;
 use crate::mutcaller::fastq::Record;
 // use crate::fastq::Record;
@@ -53,6 +73,14 @@ use flate2::{read};
 use std::process::{Command, Stdio};
 use std::ffi::OsStr;
 use std::fs;
+
+use std::time::{Instant};
+#[cfg(not(feature = "paris"))]
+use log::*;
+// use simplelog::*;
+use simplelog::{Config, WriteLogger, CombinedLogger, LevelFilter};
+use crate::countbam::get_current_working_dir;
+use crate::countbam::cleanup;
 
 
 #[derive(Deserialize)]
@@ -74,20 +102,20 @@ impl fmt::Display for Variant {
 
 
 #[derive(Debug)]
-struct Params {
-    fastq1: String,
-    fastq2: String,
-    genome: String,
-    bcs: String,
-    umi_len: usize,
-    cb_len: usize,
-    threads: usize,
-    aligner: String,
-    variants: String,
-    read_len: usize,
-    output: String,
-    keep: bool,
-    verbose: bool,
+pub struct Params {
+    pub fastq1: String,
+    pub fastq2: String,
+    pub genome: String,
+    pub bcs: String,
+    pub umi_len: usize,
+    pub cb_len: usize,
+    pub threads: usize,
+    pub aligner: String,
+    pub variants: String,
+    pub read_len: usize,
+    pub output_path: Box<Path>,
+    pub keep: bool,
+    pub verbose: bool,
 }
 
 // #[derive(Debug)]
@@ -108,7 +136,7 @@ fn load_params() -> Params {
     let params = matches.subcommand_matches("UNALIGNED").unwrap();
     let fastq1 = params.value_of("fastq1").unwrap();
     let fastq2 = params.value_of("fastq2").unwrap();
-    let output = params.value_of("output").unwrap_or("counts_mm.txt.gz");
+    let output = params.value_of("output").unwrap_or("out");
     let genome = params.value_of("genome").unwrap();
     let bcs = params.value_of("barcodes_file").unwrap_or("/Users/sfurlan/develop/mutCaller/data/737K-august-2016.txt.gz");
     let threads = params.value_of("threads").unwrap_or("1");
@@ -129,6 +157,7 @@ fn load_params() -> Params {
     if params.is_present("keep_files") {
             keep = true
     };
+    let outpath = Path::new(&output);
     // let verbose = match params.value_of("verbose") {
     //     Some(val) => println!("true"),
     //     None => println!("false"),
@@ -146,11 +175,11 @@ fn load_params() -> Params {
     //     Ok(verbose) => verbose,
     // };
 
-    Params{
+    let params = Params{
         fastq1: fastq1.to_string(),
         fastq2: fastq2.to_string(),
         genome: genome.to_string(),
-        output: output.to_string(),
+        output_path: outpath.into(), 
         bcs: bcs.to_string(),
         threads: threads as usize,
         umi_len: umi_len as usize,
@@ -160,9 +189,90 @@ fn load_params() -> Params {
         read_len: read_len as usize,
         keep: keep,
         verbose: _verbose,
-    }
+    };
+    return check_params(params).unwrap()
 }
 
+
+
+pub fn check_params(params: Params) -> Result<Params, Box<dyn Error>>{
+    let _cu = cleanup(&params.output_path.join("mutcaller.log"), false);
+    let log_file_path = &params.output_path.join("mutcaller.log");
+    let log_file = log_file_path.to_str().unwrap();
+    info!("\n\n\tStarting!\n");
+    let wdpb= get_current_working_dir().unwrap();
+    let wdir = wdpb.to_str().unwrap();
+    info!("\n\n\tCurrent working directory: '{}'\n", wdir);
+    if params.verbose {
+        eprintln!("\n\nCurrent working directory: '{}'", wdir);
+    }
+    if params.output_path.is_relative(){
+        let a1 = Path::new(wdir).join(&params.output_path);
+        let abs_outpath = a1.to_str().unwrap();
+        if params.output_path.exists() {
+                info!("\n\n\tFound existing output directory: '{}'\n", &abs_outpath);
+                warn!("\n\n\t{}", "Existing data in this folder could be lost!!!\n");
+               if params.verbose {
+                    eprintln!("Found existing output directory: '{}'", &abs_outpath);
+                    eprintln!("\t{}", "Existing data in this folder could be lost!!!");
+                }
+        } else {
+            info!("\n\n\tCreating output directory: '{}'\n", &abs_outpath);
+            if params.verbose {
+                eprintln!("Creating output directory: '{}'", &abs_outpath);
+            }
+            fs::create_dir(&params.output_path)?;
+        }
+    } else {
+        let abs_outpath = &params.output_path.to_str().unwrap();
+        if params.output_path.exists() {
+            info!("\n\n\tFound existing output directory: '{}'\n", &abs_outpath);
+            warn!("\n\n\t{}", "Existing data in this folder could be lost!!!\n");
+            if params.verbose {
+                eprintln!("Found existing output directory: '{}'", &abs_outpath);
+                eprintln!("\t{}", "Existing data in this folder could be lost!!!");
+            }
+        } else {
+            info!("\n\n\tCreating output directory: '{}'\n", &abs_outpath);
+            if params.verbose {
+                eprintln!("Creating output directory: '{}'", &abs_outpath);
+            }
+            fs::create_dir(&params.output_path)?;
+        }
+    }
+    CombinedLogger::init(vec![
+        // #[cfg(feature = "termcolor")]
+        // TermLogger::new(
+        //     LevelFilter::Warn,
+        //     Config::default(),
+        //     TerminalMode::Mixed,
+        //     ColorChoice::Always,
+        // ),
+        #[cfg(not(feature = "termcolor"))]
+        // SimpleLogger::new(LevelFilter::Warn, Config::default()),
+        WriteLogger::new(
+            LevelFilter::Info,
+            Config::default(),
+            File::create(log_file).unwrap(),
+        ),
+    ])
+    .unwrap();
+    Ok(Params{
+            fastq1: params.fastq1,
+            fastq2: params.fastq2,
+            genome: params.genome,
+            output_path: params.output_path, 
+            bcs: params.bcs,
+            threads: params.threads,
+            umi_len: params.umi_len,
+            cb_len: params.cb_len,
+            aligner: params.aligner,
+            variants: params.variants,
+            read_len: params.read_len,
+            keep: params.keep,
+            verbose: params.verbose,
+    })
+}
 
 
 
@@ -173,7 +283,10 @@ fn read_csv(params: &Params) -> Result<Vec<Variant>, Box<dyn Error>> {
 // chr12\t112450407\tA\tG\tPTPN11_227A>G
 // chr2\t208248389\tG\tA\tIDH1_132G>A
 // chr17\t7674220\tC\tT\tTP53_248C>T";
-    eprintln!("Opening variants file: {}\n", &params.variants.to_string());
+    if params.verbose {
+        eprintln!("Opening variants file: {}\n", &params.variants.to_string());
+    }
+    info!("Opening variants file: {}\n", &params.variants.to_string());
     let file = File::open(&params.variants.to_string()).unwrap();
     let reader = BufReader::new(file);
     let mut rdr = ReaderBuilder::new()
@@ -197,39 +310,32 @@ fn read_csv(params: &Params) -> Result<Vec<Variant>, Box<dyn Error>> {
 
 
 
+
+
 pub fn mutcaller_run() {
-    let config = LogConfigBuilder::builder()
-        .path("./mutcaller.log")
-        .size(1 * 100)
-        .roll_count(10)
-        .time_format("%Y-%m-%d %H:%M:%S.%f") //E.g:%H:%M:%S.%f
-        .level("debug")
-        .output_file()
-        .build();
-    let _ = simple_log::new(config);
-    info!("starting!");
-
-
+    let start = Instant::now();
 
     let params = load_params();
-        if params.verbose {
-        eprintln!("\n\n\n\nParsing Parameters!\n");
-    }
+    info!("\n\n\tParsing Parameters!\n");
     if params.verbose {
-        eprintln!("\n\n\n\nChecking programs and parsing variants!\n");
+        eprintln!("\n\nParsing Parameters!\n");
+    }
+    info!("\n\n\tChecking programs and parsing variants!\n");
+    if params.verbose {
+        eprintln!("\n\nChecking programs and parsing variants!\n");
     }
     let _prog_test_res = test_progs();
     let csvdata = read_csv(&params).unwrap();
     
+    // if params.verbose {
+    //     for variant in &csvdata {
+    //             eprintln!("\nCorrectly processed variant: {}", variant);
+    //     }
+    // }
+    info!("\n\n\tRunning with {} thread(s)!\n", &params.threads);
     if params.verbose {
-        for variant in &csvdata {
-                eprintln!("\nCorrectly processed variant: {}", variant);
-        }
-    }
-    if params.verbose {
-        eprintln!("\n\n\n\nRunning with {} thread(s)!\n", &params.threads);
+        eprintln!("\n\nRunning with {} thread(s)!\n", &params.threads);
         // eprintln!("Params: {:?} ", &params);
-        eprintln!("Processing fastqs:\n\t{}\n\t{}\n", &params.fastq1, &params.fastq2);
     }
     let _fqr = fastq(&params);
     info!("done!");
@@ -238,14 +344,14 @@ pub fn mutcaller_run() {
         // let csvdata = read_csv(&params).unwrap();
         let mut count_vec = Vec::new();
         for variant in csvdata {
-            eprintln!("\nProcessing variant: {}", variant);
-            eprintln!("\nOpening bam: {}", &"Aligned.mm2.bam".to_string());
+            if params.verbose {
+                eprintln!("\nCorrectly parsed variant: {}", variant);
+            }
+            info!("\n\n\tCorrectly parsed variant: {}\n", variant);
             count_vec.push(count_variants_mm2(&params, variant));
             
         }
-        let _none = writer_fn(count_vec, params.output.to_string());
-        eprintln!("\n\nDone!!");
-        return;
+        let _none = writer_fn(count_vec, &params);
     }
     if params.aligner == "kallisto"{
         count_kallisto(&params);
@@ -254,6 +360,13 @@ pub fn mutcaller_run() {
     if params.aligner == "STAR"{
         count_star(&params);
         return;
+    }
+    let duration = start.elapsed();
+    info!("\n\n\tDone!!\n");
+    info!("\n\n\tTime elapsed is: {:?}\n", duration);
+    if params.verbose{
+        eprintln!("\n\nDone!!");
+        eprintln!("\n\nTime elapsed is: {:?}", duration);
     }
 }
 
@@ -367,15 +480,22 @@ fn align (params: &Params)-> Result<(), Box<dyn Error>> {
 
 
 
-fn writer_fn (count_vec: Vec<Vec<Vec<u8>>>, fname: String) -> Result<(), Box<dyn Error>> {
-        let f = File::create(fname)?;
+
+pub fn writer_fn (count_vec: Vec<Vec<Vec<u8>>>, params: &Params) -> Result<(), Box<dyn Error>> {
+        let counts_path = &params.output_path.join("counts.txt.gz");
+        let counts_file = counts_path.to_str().unwrap();
+        info!("\n\n\tWriting counts to : '{}'\n", counts_file);
+        if params.verbose{
+            eprintln!("Writing counts to : '{}'\n", counts_file);
+        }
+        let f = File::create(counts_file)?;
         let mut gz = GzBuilder::new()
-                        .filename("counts_mm.txt.gz")
+                        .filename(counts_file)
                         .write(f, Compression::default());
         for result in count_vec {
-            for line in result {
-                gz.write_all(&line)?;
-            }
+                for subresult in result {
+                    gz.write_all(&subresult)?;
+                }
         }
         gz.finish()?;
         Ok(())
@@ -453,7 +573,10 @@ fn fastq(params: &Params) -> Result<(), Box<dyn Error>>{
         .expect("Unknown format for file 2.");
     })
     .expect("Unknown format for file 1.");
-    eprintln!("Total number of reads processed: {}, {} of these had Ns, {} of these had BC not in whitelist\n", total_count, nfound_count, mmcb_count);
+    info!("\n\n\tTotal number of reads processed: {}, {} of these had Ns, {} of these had BC not in whitelist\n", total_count, nfound_count, mmcb_count);
+    if params.verbose {
+        eprintln!("Total number of reads processed: {}, {} of these had Ns, {} of these had BC not in whitelist\n", total_count, nfound_count, mmcb_count);
+    }
     Ok(())
 }
 
@@ -466,7 +589,7 @@ fn process_variant(ref_id: u32, start: u32)->bam::Region{
 
 
 fn count_variants_mm2(params: &Params, variant: Variant) -> Vec<Vec<u8>>{
-    eprintln!("Processing using cb and umi in header");
+    // eprintln!("Processing using cb and umi in header");
     let split = "|BARCODE=".to_string();
     let ibam = "Aligned.mm2.sorted.bam";
     let mut total: usize = 0;
@@ -526,7 +649,10 @@ fn count_variants_mm2(params: &Params, variant: Variant) -> Vec<Vec<u8>>{
                 continue
             }        }
     }
-    eprintln!("Found {} reads spanning this variant!\n\tNumbers of errors: {}", total, err);
+    info!("\n\n\tFound {} reads spanning this variant!\n\tNumbers of errors: {}", total, err);
+    if params.verbose{
+        eprintln!("Found {} reads spanning this variant!\n\tNumbers of errors: {}", total, err);
+    }
     data.sort();
     let mut out_vec = Vec::new();
     let cdata = data.into_iter().dedup_with_count();

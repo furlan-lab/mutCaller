@@ -103,7 +103,7 @@ FLAGS:
 OPTIONS:
     -b, --bam <bam>              aligned bam file with cell barcode and umi in tags
     -c, --cb_tag <cb>            bam tag containing cell barcode; default = 'CB'
-    -o, --output <output>        output filename for compressed counts (defaults to counts_mm.txt.gz)
+    -o, --output <output>        output path; will contain mutcaller.log and counts.txt.gz
     -t, --threads <threads>      threads
     -u, --umi_tag <umi>          bam tag containing umi; default = 'XM'
     -v, --variants <variants>    path to variants.tsv file (SNVs with mm2 only supported currently) with the following
@@ -134,7 +134,7 @@ OPTIONS:
     -i, --fastq1 <fastq1>                  input fastq with barcodes
     -j, --fastq2 <fastq2>                  input fastq with read
     -g, --genome <genome>                  fasta for minimap2 or transcriptome index for kallisto
-    -o, --output <output>                  output filename for compressed counts (defaults to counts_mm.txt.gz)
+    -o, --output <output>                  output path; will contain mutcaller.log and counts.txt.gz
     -r, --read_len <read_len>              read 2 length (default 90)
     -t, --threads <threads>                threads
     -u, --umi_length <umi_len>             length of umi sequence
