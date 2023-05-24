@@ -24,7 +24,7 @@ subcommands:
                 short: o
                 takes_value: true
                 required: false
-                help: output filename for compressed counts (defaults to counts_mm.txt.gz)
+                help: output path (defaults to 'out'); inside folder a counts file will be called 'counts.txt.gz', log will be called mutcaller.log
             - threads:
                 long: threads
                 short: t
@@ -88,7 +88,7 @@ subcommands:
                 short: o
                 takes_value: true
                 required: false
-                help: output filename for compressed counts (defaults to counts_mm.txt.gz)
+                help: output path (defaults to 'out'); inside folder a counts file will be called 'counts.txt.gz', log will be called mutcaller.log
             - threads:
                 long: threads
                 short: t
