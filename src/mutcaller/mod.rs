@@ -15,6 +15,7 @@ ml minimap2/2.24-GCCcore-11.2.0
 ml SAMtools/1.17-GCC-12.2.0
 ../target/release/mutcaller UNALIGNED \
                         -t 8 -g $fa -b $bc -v variants.tsv -o out_mutcaller \
+                        -t 8 -g $fa -b $bc -v variants.tsv \
                         --fastq1 sequencer_R1.fastq.gz \
                         --fastq2 sequencer_R2.fastq.gz
 
@@ -35,6 +36,9 @@ samtools index -@ 24 Aligned.out.tagged.sorted.bam
 # rm fastq.log Log.out Log.progress.out r1.fq.gz r2.fq.gz SJ.out.tab slurm* &&
 # rm -R fastq_processed &&
 # rm -R mutcaller
+
+
+*/
 
 
 */
