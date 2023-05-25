@@ -14,7 +14,6 @@ fa=/fh/fast/furlan_s/grp/refs/GRCh38/refdata-gex-GRCh38-2020-A/fasta/genome.fa
 ml minimap2/2.24-GCCcore-11.2.0
 ml SAMtools/1.17-GCC-12.2.0
 ../target/release/mutcaller UNALIGNED \
-                        -t 8 -g $fa -b $bc -v variants.tsv -o out_mutcaller \
                         -t 8 -g $fa -b $bc -v variants.tsv \
                         --fastq1 sequencer_R1.fastq.gz \
                         --fastq2 sequencer_R2.fastq.gz
@@ -612,7 +611,7 @@ fn count_variants_mm2(params: &Params, variant: Variant) -> Vec<Vec<u8>>{
     let mut data = Vec::new();
     let ref_id = seqnames.iter().position(|&r| r == &seqname).unwrap();
     let region = process_variant(ref_id as u32, start);
-    for record in reader.fetch_by(&&region, |record| record.mapq() >= 0).unwrap(){
+    for record in reader.fetch_by(&&region, |record| record.mapq() >= 1).unwrap(){
     // for record in reader.fetch_by(&&region, |record| record.mapq() >= 4 && (record.flag().all_bits(0 as u16) || record.flag().all_bits(16 as u16))).unwrap(){
         total+=1;
         let readheader = match str::from_utf8(record.as_ref().unwrap().name()) {
