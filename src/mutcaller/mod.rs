@@ -13,12 +13,24 @@ fa=/Users/sfurlan/refs/genome.fa
 fa=/fh/fast/furlan_s/grp/refs/GRCh38/refdata-gex-GRCh38-2020-A/fasta/genome.fa
 ml minimap2/2.24-GCCcore-11.2.0
 ml SAMtools/1.17-GCC-12.2.0
-ml STAR/2.7.9a-GCC-11.2.0
 ../target/release/mutcaller UNALIGNED \
                         -t 8 -g $fa -b $bc -v variants.tsv \
-                        --fastq1 sequencer_R1.fastq.gz \
+                        -o out_mm2 --fastq1 sequencer_R1.fastq.gz \
                         --fastq2 sequencer_R2.fastq.gz
 
+bc=~/develop/mutCaller/data/737K-august-2016.txt.gz
+ml SAMtools/1.17-GCC-12.2.0
+ml STAR/2.7.9a-GCC-11.2.0
+fa=/fh/fast/furlan_s/grp/refs/GRCh38/refdata-gex-GRCh38-2020-A/star
+../target/release/mutcaller UNALIGNED \
+                        -t 8 -g $fa -b $bc -v variants.tsv -a STAR -l /app/software/CellRanger/6.0.1/lib/bin/STAR \
+                        -o out_star --fastq1 sequencer_R1.fastq.gz \
+                        --fastq2 sequencer_R2.fastq.gz
+
+
+
+/app/software/CellRanger/6.0.1/lib/bin/STAR --genomeDir $fa --readFilesIn mutcaller_R1.fq.gz --readNameSeparator space \
+ --runThreadN 24 --outSAMunmapped Within KeepPairs --outSAMtype BAM SortedByCoordinate
 
 ###compare to cbsniffer
 mkdir cbsniffer
@@ -112,6 +124,7 @@ pub struct Params {
     pub cb_len: usize,
     pub threads: usize,
     pub aligner: String,
+    pub aligner_loc: String,
     pub variants: String,
     pub read_len: usize,
     pub output_path: Box<Path>,
@@ -148,7 +161,11 @@ fn load_params() -> Params {
     let cb_len = cb_len.to_string().parse::<u8>().unwrap();
     let read_len = params.value_of("read_len").unwrap_or("90");
     let read_len = read_len.to_string().parse::<usize>().unwrap();
-    let aligner = params.value_of("aligner").unwrap_or("mm2");
+    let aligner = params.value_of("aligner").unwrap_or("minimap2");
+    let mut aligner_loc = aligner;
+    if params.is_present("aligner_loc") {
+        aligner_loc = params.value_of("aligner_loc").unwrap();
+    }
     let variantstring = params.value_of("variants").unwrap();
     let mut _verbose = true;
     if params.is_present("quiet") {
@@ -186,6 +203,7 @@ fn load_params() -> Params {
         umi_len: umi_len as usize,
         cb_len: cb_len as usize,
         aligner: aligner.to_string(),
+        aligner_loc: aligner_loc.to_string(),
         variants: variantstring.to_string(),
         read_len: read_len as usize,
         keep: keep,
@@ -268,6 +286,7 @@ pub fn check_params(params: Params) -> Result<Params, Box<dyn Error>>{
             umi_len: params.umi_len,
             cb_len: params.cb_len,
             aligner: params.aligner,
+            aligner_loc: params.aligner_loc,
             variants: params.variants,
             read_len: params.read_len,
             keep: params.keep,
@@ -325,7 +344,7 @@ pub fn mutcaller_run() {
     if params.verbose {
         eprintln!("\n\nChecking programs and parsing variants!\n");
     }
-    let _prog_test_res = test_progs();
+    let _prog_test_res = test_progs(&params);
     let csvdata = read_csv(&params).unwrap();
     
     // if params.verbose {
@@ -376,19 +395,19 @@ pub fn mutcaller_run() {
 // samtools view -b -@ 8 -o Aligned.mm2.sorted.sam Aligned.mm2.sorted.bam
 // samtools index -@ 8 Aligned.mm2.sorted.bam
 
-fn test_progs () -> Result<(), Box<dyn Error>>{
-    let _output = Command::new("STAR")
+fn test_progs (params: &Params) -> Result<(), Box<dyn Error>>{
+    let _output = Command::new(&params.aligner_loc)
                     .arg("-h")
                     .stderr(Stdio::piped())
                     .stdout(Stdio::piped())
                      .output()
-                     .expect("\n\n*******Failed to execute STAR*******\n\n");
-    let _output = Command::new("minimap2")
-                    .arg("-h")
-                    .stderr(Stdio::piped())
-                    .stdout(Stdio::piped())
-                     .output()
-                     .expect("\n\n*******Failed to execute minimap2*******\n\n");
+                     .expect("\n\n*******Failed to execute aligner*******\n\n");
+    // let _output = Command::new("minimap2")
+    //                 .arg("-h")
+    //                 .stderr(Stdio::piped())
+    //                 .stdout(Stdio::piped())
+    //                  .output()
+    //                  .expect("\n\n*******Failed to execute minimap2*******\n\n");
     let _output = Command::new("samtools")
                     .arg("-h")
                     .stderr(Stdio::piped())
@@ -403,8 +422,9 @@ fn test_progs () -> Result<(), Box<dyn Error>>{
 fn align (params: &Params)-> Result<(), Box<dyn Error>> {
     let align_sam = &params.output_path.join("Aligned.sam").clone().to_owned();
     let align_sorted_sam = &params.output_path.join("Aligned.sorted.sam").clone().to_owned();
-    let align_sorted_bam = &params.output_path.join("Aligned.sorted.bam").clone().to_owned();
+    let align_sorted_bam = &params.output_path.join("Aligned.sortedByCoord.out.bam").clone().to_owned();
     let fastq = &params.output_path.join("mutcaller_R1.fq.gz").clone().to_owned();
+    let outfolder = &params.output_path.join("").clone().to_owned();
     // let mm_cmd = "/Users/sfurlan/.local/bin/minimap2";
     // let mm_args = "-h";
     // let mm_args_pre = format!("-a {} -t {} mutcaller_R1.fq.gz | samtools sort -@ {} | samtools view -@ {} -o Aligned.mm2.bam", params.genome.to_string(), params.threads.to_string(), params.threads.to_string(), params.threads.to_string());
@@ -433,7 +453,7 @@ fn align (params: &Params)-> Result<(), Box<dyn Error>> {
         eprintln!("{}", "Aligning reads using minimap2");
         }
         info!("{}", "Aligning reads using minimap2");
-        let output = Command::new("minimap2")
+        let output = Command::new(&params.aligner_loc)
                         .arg("--MD")
                         .arg("-a")
                         .arg(params.genome.to_string())
@@ -496,7 +516,9 @@ fn align (params: &Params)-> Result<(), Box<dyn Error>> {
         eprintln!("{}", "Aligning reads using STAR");
         }
         info!("{}", "Aligning reads using STAR");
-        let output = Command::new("STAR")
+        let output = Command::new(&params.aligner_loc)
+                        .arg("--outFileNamePrefix")
+                        .arg(outfolder.to_str().unwrap())
                         .arg("--genomeDir")
                         .arg(params.genome.to_string())
                         .arg("--readFilesIn")
@@ -505,14 +527,16 @@ fn align (params: &Params)-> Result<(), Box<dyn Error>> {
                         .arg("space")
                         .arg("--runThreadN")
                         .arg(params.threads.to_string())
-                        .arg("--outFileNamePrefix") 
-                        .arg(align_sorted_bam.to_str().unwrap())
                         .arg("--outSAMunmapped") 
                         .arg("Within")
                         .arg("KeepPairs") 
                         .arg("--outSAMtype") 
                         .arg("BAM")
                         .arg("SortedByCoordinate")
+                        .arg("--outSAMattributes") 
+                        .arg("All")
+                        .arg("--readFilesCommand")
+                        .arg("zcat")
                         .stderr(Stdio::piped())
                         .stdout(Stdio::piped())
                          .output()
@@ -657,7 +681,7 @@ fn process_variant(ref_id: u32, start: u32)->bam::Region{
 fn count_variants(params: &Params, variant: Variant) -> Vec<Vec<u8>>{
     // eprintln!("Processing using cb and umi in header");
     let split = "|BARCODE=".to_string();
-    let ibam_temp = &params.output_path.join("Aligned.sorted.bam").clone().to_owned();
+    let ibam_temp = &params.output_path.join("Aligned.sortedByCoord.out.bam").clone().to_owned();
     let ibam = ibam_temp.to_str().unwrap();
     let mut total: usize = 0;
     let mut err: usize = 0;

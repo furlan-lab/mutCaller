@@ -112,7 +112,13 @@ subcommands:
                 short: a
                 takes_value: true
                 required: false
-                help: aligner software - currently mm2 (default) and kallisto are supported
+                help: aligner software - currently minimap (default) and STAR are supported; if not available on command line supply in loc_aligner argument
+            - aligner_loc:
+                long: aligner_loc
+                short: l
+                takes_value: true
+                required: false
+                help: path to aligner e.g. /app/software/CellRanger/6.0.1/lib/bin/STAR
             - read_len:
                 long: read_len
                 short: r
