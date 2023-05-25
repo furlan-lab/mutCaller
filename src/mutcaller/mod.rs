@@ -48,7 +48,7 @@ extern crate fastq;
 extern crate itertools;
 
 
-use std::io;
+// use std::io;
 use clap::{App, load_yaml};
 use std::str;
 use std::error::Error;
@@ -340,27 +340,27 @@ pub fn mutcaller_run() {
     let _fqr = fastq(&params);
     info!("done!");
     let _ar = align(&params);
-    if params.aligner == "mm2" {
+    // if params.aligner == "mm2" {
         // let csvdata = read_csv(&params).unwrap();
-        let mut count_vec = Vec::new();
-        for variant in csvdata {
-            if params.verbose {
-                eprintln!("\nCorrectly parsed variant: {}", variant);
-            }
-            info!("\n\n\tCorrectly parsed variant: {}\n", variant);
-            count_vec.push(count_variants_mm2(&params, variant));
-            
+    let mut count_vec = Vec::new();
+    for variant in csvdata {
+        if params.verbose {
+            eprintln!("\nCorrectly parsed variant: {}", variant);
         }
-        let _none = writer_fn(count_vec, &params);
+        info!("\n\n\tCorrectly parsed variant: {}\n", variant);
+        count_vec.push(count_variants(&params, variant));
+        
     }
-    if params.aligner == "kallisto"{
-        count_kallisto(&params);
-        return;
-    }
-    if params.aligner == "STAR"{
-        count_star(&params);
-        return;
-    }
+    let _none = writer_fn(count_vec, &params);
+    // }
+    // if params.aligner == "kallisto"{
+    //     count_kallisto(&params);
+    //     return;
+    // }
+    // if params.aligner == "STAR"{
+    //     count_star(&params);
+    //     return;
+    // }
     let duration = start.elapsed();
     info!("\n\n\tDone!!\n");
     info!("\n\n\tTime elapsed is: {:?}\n", duration);
@@ -376,6 +376,12 @@ pub fn mutcaller_run() {
 // samtools index -@ 8 Aligned.mm2.sorted.bam
 
 fn test_progs () -> Result<(), Box<dyn Error>>{
+    let _output = Command::new("STAR")
+                    .arg("-h")
+                    .stderr(Stdio::piped())
+                    .stdout(Stdio::piped())
+                     .output()
+                     .expect("\n\n*******Failed to execute STAR*******\n\n");
     let _output = Command::new("minimap2")
                     .arg("-h")
                     .stderr(Stdio::piped())
@@ -394,6 +400,10 @@ fn test_progs () -> Result<(), Box<dyn Error>>{
 
 
 fn align (params: &Params)-> Result<(), Box<dyn Error>> {
+    let align_sam = &params.output_path.join("Aligned.sam").clone().to_owned();
+    let align_sorted_sam = &params.output_path.join("Aligned.sorted.sam").clone().to_owned();
+    let align_sorted_bam = &params.output_path.join("Aligned.sorted.bam").clone().to_owned();
+    let fastq = &params.output_path.join("mutcaller_R1.fq.gz").clone().to_owned();
     // let mm_cmd = "/Users/sfurlan/.local/bin/minimap2";
     // let mm_args = "-h";
     // let mm_args_pre = format!("-a {} -t {} mutcaller_R1.fq.gz | samtools sort -@ {} | samtools view -@ {} -o Aligned.mm2.bam", params.genome.to_string(), params.threads.to_string(), params.threads.to_string(), params.threads.to_string());
@@ -417,63 +427,117 @@ fn align (params: &Params)-> Result<(), Box<dyn Error>> {
     //                 .arg("-h")
     //                  .output()
     //                  .expect("Failed to execute minimap2");
-    eprintln!("{}", "Aligning reads using minimap2");
-    let output = Command::new("minimap2")
-                    .arg("--MD")
-                    .arg("-a")
-                    .arg(params.genome.to_string())
-                    .arg("-t")
-                    .arg(params.threads.to_string())
-                    .arg("mutcaller_R1.fq.gz")
-                    .arg("-o")
-                    .arg("Aligned.mm2.sam")
-                    .stderr(Stdio::piped())
-                    .stdout(Stdio::piped())
-                     .output()
-                     .expect("\n\n*******Failed to execute minimap2*******\n\n");
-    eprintln!("{}", String::from_utf8_lossy(&output.stderr));
-    eprintln!("{}", "Minimap2 complete; Running samtools sort");
-    let output = Command::new("samtools")
+    if params.aligner == "minimap2" {
+        if params.verbose {
+        eprintln!("{}", "Aligning reads using minimap2");
+        }
+        info!("{}", "Aligning reads using minimap2");
+        let output = Command::new("minimap2")
+                        .arg("--MD")
+                        .arg("-a")
+                        .arg(params.genome.to_string())
+                        .arg("-t")
+                        .arg(params.threads.to_string())
+                        .arg(fastq.to_str().unwrap())
+                        .arg("-o")
+                        .arg(align_sam.to_str().unwrap())
+                        .stderr(Stdio::piped())
+                        .stdout(Stdio::piped())
+                         .output()
+                         .expect("\n\n*******Failed to execute minimap2*******\n\n");
+        if params.verbose {
+            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+            eprintln!("{}", "Minimap2 complete; Running samtools sort");
+        }
+        info!("{}", String::from_utf8_lossy(&output.stderr));
+        info!("{}", "Minimap2 complete; Running samtools sort");
+        let output = Command::new("samtools")
                     .arg("sort")
                     .arg("-@")
                     .arg(params.threads.to_string())
                     .arg("-o")
-                    .arg("Aligned.mm2.sorted.sam")
-                    .arg("Aligned.mm2.sam")
+                    .arg(align_sorted_sam.to_str().unwrap())
+                    .arg(align_sam.to_str().unwrap())
                     .stderr(Stdio::piped())
                     .stdout(Stdio::piped())
                     .output()
                      .expect("\n\n*******Failed to execute samtools view*******\n\n");
-    eprintln!("{}", String::from_utf8_lossy(&output.stderr));
-    eprintln!("{}", "Samtools sort complete; Running samtools view");
-    let output = Command::new("samtools")
-                    .arg("view")
-                    .arg("-b")
-                    .arg("-@")
-                    .arg(params.threads.to_string())
-                    .arg("-o")
-                    .arg("Aligned.mm2.sorted.bam")
-                    .arg("Aligned.mm2.sorted.sam")
-                    .stderr(Stdio::piped())
-                    .stdout(Stdio::piped())
-                    .output()
-                     .expect("\n\n*******Failed to execute samtools sort*******\n\n");
-    eprintln!("{}", String::from_utf8_lossy(&output.stderr));
-    eprintln!("{}", "Samtools view complete; Running samtools index");
+        if params.verbose {
+            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+            eprintln!("{}", "Samtools sort complete; Running samtools view");
+        }
+        info!("{}", String::from_utf8_lossy(&output.stderr));
+        info!("{}", "Samtools sort complete; Running samtools view");
+        let output = Command::new("samtools")
+                        .arg("view")
+                        .arg("-b")
+                        .arg("-@")
+                        .arg(params.threads.to_string())
+                        .arg("-o")
+                        .arg(align_sorted_bam.to_str().unwrap())
+                        .arg(align_sorted_sam.to_str().unwrap())
+                        .stderr(Stdio::piped())
+                        .stdout(Stdio::piped())
+                        .output()
+                         .expect("\n\n*******Failed to execute samtools sort*******\n\n");
+        if params.verbose {
+            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+            eprintln!("{}", "Samtools view complete; Running samtools index");
+        }
+        info!("{}", String::from_utf8_lossy(&output.stderr));
+        info!("{}", "Samtools view complete; Running samtools index");
+    }
+  //   /app/software/CellRanger/6.0.1/lib/bin/STAR --genomeDir $transcriptome/star --readFilesIn ${fq3} --readNameSeparator space \
+  // --runThreadN 24 --outSAMunmapped Within KeepPairs --outSAMtype BAM SortedByCoordinate
+
+    if params.aligner == "STAR" {
+        if params.verbose {
+        eprintln!("{}", "Aligning reads using STAR");
+        }
+        info!("{}", "Aligning reads using STAR");
+        let output = Command::new("STAR")
+                        .arg("--genomeDir")
+                        .arg(params.genome.to_string())
+                        .arg("--readFilesIn")
+                        .arg(fastq.to_str().unwrap())
+                        .arg("--readNameSeparator")
+                        .arg("space")
+                        .arg("--runThreadN")
+                        .arg(params.threads.to_string())
+                        .arg("--outFileNamePrefix") 
+                        .arg(align_sorted_bam.to_str().unwrap())
+                        .arg("--outSAMunmapped") 
+                        .arg("Within")
+                        .arg("KeepPairs") 
+                        .arg("--outSAMtype") 
+                        .arg("BAM")
+                        .arg("SortedByCoordinate")
+                        .stderr(Stdio::piped())
+                        .stdout(Stdio::piped())
+                         .output()
+                         .expect("\n\n*******Failed to execute STAR*******\n\n");
+        if params.verbose {
+            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+            eprintln!("{}", "STAR complete; running samtools index");
+        }
+    }
     let output = Command::new("samtools")
                     .arg("index")
                     .arg("-@")
                     .arg(params.threads.to_string())
-                    .arg("Aligned.mm2.sorted.bam")
+                    .arg(align_sorted_bam.to_str().unwrap())
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped())
                     .output()
                      .expect("\n\n*******Failed to execute samtools index*******\n\n");
-    eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+    if params.verbose {
+        eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+    }
+    info!("{}", String::from_utf8_lossy(&output.stderr));
     if !params.keep {
-        fs::remove_file("Aligned.mm2.sorted.sam")?;
-        fs::remove_file("Aligned.mm2.sam")?;
-        fs::remove_file("mutcaller_R1.fq.gz")?;
+        fs::remove_file(align_sorted_sam.to_str().unwrap())?;
+        fs::remove_file(align_sam.to_str().unwrap())?;
+        fs::remove_file(fastq.to_str().unwrap())?;
     }
     Ok(())
 }
@@ -511,8 +575,9 @@ fn remove_whitespace(s: &mut String) {
 
 
 fn fastq(params: &Params) -> Result<(), Box<dyn Error>>{
+    let outfastq_temp = &params.output_path.join("mutcaller_R1.fq.gz").clone().to_owned();
+    let outfastq = outfastq_temp.to_str().unwrap();
     let split = "|BARCODE=".to_string();
-    let outfastq = "mutcaller_R1.fq.gz".to_string();
     let mut cbvec = lines_from_file(&params.bcs);
     cbvec.sort_unstable();
     let _zip = true;
@@ -588,10 +653,11 @@ fn process_variant(ref_id: u32, start: u32)->bam::Region{
 }
 
 #[allow(unused_comparisons)]
-fn count_variants_mm2(params: &Params, variant: Variant) -> Vec<Vec<u8>>{
+fn count_variants(params: &Params, variant: Variant) -> Vec<Vec<u8>>{
     // eprintln!("Processing using cb and umi in header");
     let split = "|BARCODE=".to_string();
-    let ibam = "Aligned.mm2.sorted.bam";
+    let ibam_temp = &params.output_path.join("Aligned.sorted.bam").clone().to_owned();
+    let ibam = ibam_temp.to_str().unwrap();
     let mut total: usize = 0;
     let mut err: usize = 0;
     let seqname = variant.seq;
@@ -737,98 +803,98 @@ fn count_variants_mm2(params: &Params, variant: Variant) -> Vec<Vec<u8>>{
 // }
 
 
-fn count_star(params: &Params) {
-    let ibam = "Aligned.mm2.bam";
-    let split = "|BARCODE=".to_string();
-    let joiner = "_".to_string();
-    eprintln!("Counting star reads");
-    let mut total: usize = 0;
-    let mut goodreadcount: usize = 0;
-    let (_read_threads, _write_threads) = if (*&params.threads as i8) > 2{
-        (((*&params.threads/2) -1) as usize, ((*&params.threads/2) -1) as usize)
-    } else {
-        (0 as usize, 0 as usize)
-    };
+// fn count_star(params: &Params) {
+//     let ibam = "Aligned.mm2.bam";
+//     let split = "|BARCODE=".to_string();
+//     let joiner = "_".to_string();
+//     eprintln!("Counting star reads");
+//     let mut total: usize = 0;
+//     let mut goodreadcount: usize = 0;
+//     let (_read_threads, _write_threads) = if (*&params.threads as i8) > 2{
+//         (((*&params.threads/2) -1) as usize, ((*&params.threads/2) -1) as usize)
+//     } else {
+//         (0 as usize, 0 as usize)
+//     };
 
-    let reader = bam::BamReader::from_path(ibam.to_string(), 0).unwrap();
-    let _output = std::io::BufWriter::new(io::stdout());
-    let header = reader.header().clone();
-    let data = header.reference_names();
-    let mut seqnames = Vec::new();
-    for seq in data {
-        seqnames.push(seq)
-    }
-    for record in reader {
-        total += 1;
-        let newrecord = record.unwrap();
-        let seqname = match str::from_utf8(&newrecord.name()) {
-            Ok(v) => v,
-            Err(e) => panic!("\n\n*******Invalid UTF-8 sequence: {}*******\n\n", e),
-        };
-        let cbumi= seqname.split(&split).nth(1).unwrap().to_string();
-        let _modified_name = seqname.replace(&split, &joiner);
-        let (cb_umi_s1, cb_umi_s2) = cbumi.split_at((params.cb_len+1).into());
-        let mut good_read = false;
-        let cigarmatch = format!("{}M", *&params.read_len);
-        let cigar = newrecord.cigar().to_string();
-        if cigar == cigarmatch{
-            good_read = true
-        }
-        if good_read && ((newrecord.flag().to_string()=="Flag(16)") | (newrecord.flag().to_string()=="Flag(0)")){
-            goodreadcount += 1;
-            println!("{} {} {} {}", cb_umi_s1, cb_umi_s2, seqnames[newrecord.ref_id() as usize].to_string(), newrecord.start());
-        }
-    }
-    eprintln!("Completed; {} total reads processed!", &total);
-    eprintln!("{} good reads counted!", &goodreadcount);
-}
+//     let reader = bam::BamReader::from_path(ibam.to_string(), 0).unwrap();
+//     let _output = std::io::BufWriter::new(io::stdout());
+//     let header = reader.header().clone();
+//     let data = header.reference_names();
+//     let mut seqnames = Vec::new();
+//     for seq in data {
+//         seqnames.push(seq)
+//     }
+//     for record in reader {
+//         total += 1;
+//         let newrecord = record.unwrap();
+//         let seqname = match str::from_utf8(&newrecord.name()) {
+//             Ok(v) => v,
+//             Err(e) => panic!("\n\n*******Invalid UTF-8 sequence: {}*******\n\n", e),
+//         };
+//         let cbumi= seqname.split(&split).nth(1).unwrap().to_string();
+//         let _modified_name = seqname.replace(&split, &joiner);
+//         let (cb_umi_s1, cb_umi_s2) = cbumi.split_at((params.cb_len+1).into());
+//         let mut good_read = false;
+//         let cigarmatch = format!("{}M", *&params.read_len);
+//         let cigar = newrecord.cigar().to_string();
+//         if cigar == cigarmatch{
+//             good_read = true
+//         }
+//         if good_read && ((newrecord.flag().to_string()=="Flag(16)") | (newrecord.flag().to_string()=="Flag(0)")){
+//             goodreadcount += 1;
+//             println!("{} {} {} {}", cb_umi_s1, cb_umi_s2, seqnames[newrecord.ref_id() as usize].to_string(), newrecord.start());
+//         }
+//     }
+//     eprintln!("Completed; {} total reads processed!", &total);
+//     eprintln!("{} good reads counted!", &goodreadcount);
+// }
 
 
 
-fn count_kallisto(params: &Params) {
-    eprintln!("Counting kallisto reads");
-    let mut total: usize = 0;
-    let ibam = "Aligned.mm2.bam";
-    let split = "|BARCODE=".to_string();
-    let joiner = "_".to_string();
-    let mut goodreadcount: usize = 0;
-    let (_read_threads, _write_threads) = if (*&params.threads as i8) > 2{
-        (((*&params.threads/2) -1) as usize, ((*&params.threads/2) -1) as usize)
-    } else {
-        (0 as usize, 0 as usize)
-    };
-    let reader = bam::BamReader::from_path(ibam.to_string(), 0).unwrap();
-    let _output = io::BufWriter::new(io::stdout());
-    let header = reader.header().clone();
-    let data = header.reference_names();
-    let mut seqnames = Vec::new();
-    for seq in data {
-        seqnames.push(seq)
-    }
-    for record in reader {
-        total += 1;
-        let newrecord = record.unwrap();
-        let seqname = match str::from_utf8(&newrecord.name()) {
-            Ok(v) => v,
-            Err(e) => panic!("\n\n*******Invalid UTF-8 sequence: {}*******\n\n", e),
-        };
-        let cbumi= seqname.split(&split).nth(1).unwrap().to_string();
-        let _modified_name = seqname.replace(&split, &joiner);
-        let (cb_umi_s1, cb_umi_s2) = cbumi.split_at((params.cb_len+1).into());
-        let mut good_read = false;
-        let cigarmatch = format!("{}M", *&params.read_len);
-        let cigar = newrecord.cigar().to_string();
-        if cigar == cigarmatch{
-            good_read = true
-        }
-        if good_read && ((newrecord.flag().to_string()=="Flag(16)") | (newrecord.flag().to_string()=="Flag(0)")){
-            goodreadcount += 1;
-            println!("{} {} {}", cb_umi_s1, cb_umi_s2, seqnames[newrecord.ref_id() as usize].to_string());
-        }
-    }
-    eprintln!("Completed; {} total alignments processed!", &total);
-    eprintln!("{} good alignments counted!", &goodreadcount);
-}
+// fn count_kallisto(params: &Params) {
+//     eprintln!("Counting kallisto reads");
+//     let mut total: usize = 0;
+//     let ibam = "Aligned.mm2.bam";
+//     let split = "|BARCODE=".to_string();
+//     let joiner = "_".to_string();
+//     let mut goodreadcount: usize = 0;
+//     let (_read_threads, _write_threads) = if (*&params.threads as i8) > 2{
+//         (((*&params.threads/2) -1) as usize, ((*&params.threads/2) -1) as usize)
+//     } else {
+//         (0 as usize, 0 as usize)
+//     };
+//     let reader = bam::BamReader::from_path(ibam.to_string(), 0).unwrap();
+//     let _output = io::BufWriter::new(io::stdout());
+//     let header = reader.header().clone();
+//     let data = header.reference_names();
+//     let mut seqnames = Vec::new();
+//     for seq in data {
+//         seqnames.push(seq)
+//     }
+//     for record in reader {
+//         total += 1;
+//         let newrecord = record.unwrap();
+//         let seqname = match str::from_utf8(&newrecord.name()) {
+//             Ok(v) => v,
+//             Err(e) => panic!("\n\n*******Invalid UTF-8 sequence: {}*******\n\n", e),
+//         };
+//         let cbumi= seqname.split(&split).nth(1).unwrap().to_string();
+//         let _modified_name = seqname.replace(&split, &joiner);
+//         let (cb_umi_s1, cb_umi_s2) = cbumi.split_at((params.cb_len+1).into());
+//         let mut good_read = false;
+//         let cigarmatch = format!("{}M", *&params.read_len);
+//         let cigar = newrecord.cigar().to_string();
+//         if cigar == cigarmatch{
+//             good_read = true
+//         }
+//         if good_read && ((newrecord.flag().to_string()=="Flag(16)") | (newrecord.flag().to_string()=="Flag(0)")){
+//             goodreadcount += 1;
+//             println!("{} {} {}", cb_umi_s1, cb_umi_s2, seqnames[newrecord.ref_id() as usize].to_string());
+//         }
+//     }
+//     eprintln!("Completed; {} total alignments processed!", &total);
+//     eprintln!("{} good alignments counted!", &goodreadcount);
+// }
 
 fn lines_from_file(filename: &str) -> Vec<String> {
     let path = Path::new(filename);
