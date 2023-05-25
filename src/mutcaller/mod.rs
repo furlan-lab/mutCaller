@@ -13,6 +13,7 @@ fa=/Users/sfurlan/refs/genome.fa
 fa=/fh/fast/furlan_s/grp/refs/GRCh38/refdata-gex-GRCh38-2020-A/fasta/genome.fa
 ml minimap2/2.24-GCCcore-11.2.0
 ml SAMtools/1.17-GCC-12.2.0
+ml STAR/2.7.9a-GCC-11.2.0
 ../target/release/mutcaller UNALIGNED \
                         -t 8 -g $fa -b $bc -v variants.tsv \
                         --fastq1 sequencer_R1.fastq.gz \
