@@ -699,7 +699,7 @@ fn count_variants(params: &Params, variant: Variant) -> Vec<Vec<u8>>{
     let mut data = Vec::new();
     let ref_id = seqnames.iter().position(|&r| r == &seqname).unwrap();
     let region = process_variant(ref_id as u32, start);
-    for record in reader.fetch_by(&&region, |record| record.mapq() >= 1).unwrap(){
+    for record in reader.fetch(&&region).unwrap(){
     // for record in reader.fetch_by(&&region, |record| record.mapq() >= 4 && (record.flag().all_bits(0 as u16) || record.flag().all_bits(16 as u16))).unwrap(){
         total+=1;
         let readheader = match str::from_utf8(record.as_ref().unwrap().name()) {
