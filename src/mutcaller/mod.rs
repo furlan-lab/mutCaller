@@ -20,7 +20,6 @@ ml SAMtools/1.17-GCC-12.2.0
 
 bc=~/develop/mutCaller/data/737K-august-2016.txt.gz
 ml SAMtools/1.17-GCC-12.2.0
-ml STAR/2.7.9a-GCC-11.2.0
 fa=/fh/fast/furlan_s/grp/refs/GRCh38/refdata-gex-GRCh38-2020-A/star
 ../target/release/mutcaller UNALIGNED \
                         -t 8 -g $fa -b $bc -v variants.tsv -a STAR -l /app/software/CellRanger/6.0.1/lib/bin/STAR \
@@ -28,9 +27,6 @@ fa=/fh/fast/furlan_s/grp/refs/GRCh38/refdata-gex-GRCh38-2020-A/star
                         --fastq2 sequencer_R2.fastq.gz
 
 
-
-/app/software/CellRanger/6.0.1/lib/bin/STAR --genomeDir $fa --readFilesIn mutcaller_R1.fq.gz --readNameSeparator space \
- --runThreadN 24 --outSAMunmapped Within KeepPairs --outSAMtype BAM SortedByCoordinate
 
 ###compare to cbsniffer
 mkdir cbsniffer
@@ -455,6 +451,7 @@ fn align (params: &Params)-> Result<(), Box<dyn Error>> {
         info!("{}", "Aligning reads using minimap2");
         let output = Command::new(&params.aligner_loc)
                         .arg("--MD")
+                        .arg("-Y")
                         .arg("-a")
                         .arg(params.genome.to_string())
                         .arg("-t")

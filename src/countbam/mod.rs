@@ -64,6 +64,11 @@ samtools view -b aln_sncr_fc_Malig.mdtag.bam "chr14:31113320-31113321" > breaksi
 
 ~/develop/mutCaller/target/release/mutcaller ALIGNED -b aln_sncr_fc_Malig.mdtag.bam -v ~/develop/mutCaller/tests/variants.tsv -t 1 -o test100
 ~/develop/mutCaller/target/release/mutcaller ALIGNED -b subsampleMalig.sorted.mdtag.bam -v /fh/fast/furlan_s/user/owalt/long_read/lv1/vcf/variants.tsv -t 1 -o out200
+
+
+~/develop/mutCaller/target/release/mutcaller ALIGNED -b breaksit2.bam -v breaksit.tsv -t 1 -out_long
+
+
 */
 
 extern crate simplelog;
@@ -616,55 +621,63 @@ fn count_variants_wrapper(params: &Params, variant: Variant) -> Vec<Vec<u8>>{
 
 
         // // maybe will work....
-        let _r = record.as_ref().unwrap().alignment_entries().unwrap().try_for_each(|entry| {
-            eprintln!("{:?}", entry.record_pos().unwrap());
-            if let Some((ref_pos, ref_nt)) = entry.ref_pos_nt() {
-             // eprintln!("{:?}", region.start());
-                if region.start() == ref_pos {
-                    if let Some((_record_pos, record_nt)) = entry.record_pos_nt() {
-                        if ref_nt as char == record_nt as char {
-                            eprintln!("Ref found");
-                            _result = "ref";
-                        } else if record_nt as char == query_nt{
-                            eprintln!("Query found");
-                            _result = "query";
-                        } else {
-                            eprintln!("Other found");
-                            _result = "other";
-                        }   
-                            eprintln!("pushting data");
-                            data.push(format!("{} {} {} {} {} {}", _cb, _umi, seqname, ref_pos, vname, _result));
-                            // return ControlFlow::Continue(())
-                            return ControlFlow::Break(entry)
-                        }
-                    return ControlFlow::Continue(())
-                    } else {
-                        return ControlFlow::Continue(())
-                    }
-                } else {
-                    return ControlFlow::Continue(())
-                }        
-        });
-
-        // let iter = record.as_ref().unwrap().alignment_entries().unwrap();
-        // let mut new_iter = iter.map_while(|entry| {
+        // let _r = record.as_ref().unwrap().alignment_entries().unwrap().try_for_each(|entry| {
+        //     // eprintln!("{:?}", entry.record_pos().unwrap());
         //     if let Some((ref_pos, ref_nt)) = entry.ref_pos_nt() {
+        //      // eprintln!("{:?}", region.start());
         //         if region.start() == ref_pos {
         //             if let Some((_record_pos, record_nt)) = entry.record_pos_nt() {
         //                 if ref_nt as char == record_nt as char {
+        //                     eprintln!("Ref found");
         //                     _result = "ref";
         //                 } else if record_nt as char == query_nt{
+        //                     eprintln!("Query found");
         //                     _result = "query";
         //                 } else {
+        //                     eprintln!("Other found");
         //                     _result = "other";
-        //                 }
+        //                 }   
         //                     eprintln!("pushting data");
         //                     data.push(format!("{} {} {} {} {} {}", _cb, _umi, seqname, ref_pos, vname, _result));
-        //                     // Some(entry)
+        //                     // return ControlFlow::Continue(())
+        //                     return ControlFlow::Break(entry)
         //                 }
+        //             return ControlFlow::Continue(())
+        //             } else {
+        //                 return ControlFlow::Continue(())
         //             }
-        //     }      
+        //         } else {
+        //             return ControlFlow::Continue(())
+        //         }        
         // });
+
+        let iter = record.as_ref().unwrap().alignment_entries().unwrap();
+        let mut new_iter = iter.map_while(|entry| {
+            eprintln!("{:?}", entry);
+            if let Some((ref_pos, ref_nt)) = entry.ref_pos_nt() {
+                if region.start() == ref_pos {
+                    if let Some((_record_pos, record_nt)) = entry.record_pos_nt() {
+                        if ref_nt as char == record_nt as char {
+                            _result = "ref";
+                        } else if record_nt as char == query_nt{
+                            _result = "query";
+                        } else {
+                            _result = "other";
+                        }
+                            eprintln!("pushting data");
+                            data.push(format!("{} {} {} {} {} {}", _cb, _umi, seqname, ref_pos, vname, _result));
+                            return Some(entry)
+                    } else {
+                        return Some(entry)
+                    }
+
+                } else {
+                    return Some(entry)
+                }
+            } else {
+                return Some(entry)
+            }      
+        });
 
         // for entry in record.as_ref().unwrap().alignment_entries(){
         //     // let do_steps = || -> Result<(), io::Error> {
