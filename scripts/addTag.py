@@ -6,8 +6,8 @@ from sys import stdout
 def parse_read(ss, separator="|BARCODE=", cblen=16, umilen=10):
   split=ss.qname.split(separator)
   ss.qname=f'{split[0]}:{split[1]}'
-  cb=split[1][0:cblen]+"-1"
-  umi=split[1][cblen:umilen+cblen]
+  cb=str(split[int(1)][int(0):int(cblen)])+str("-1")
+  umi=split[int(1)][int(cblen):int(umilen)+int(cblen)]
   ss.tags.update({'CB':cb, 'CR':cb, 'UB':umi, 'UR':umi})
   return(ss)
 
