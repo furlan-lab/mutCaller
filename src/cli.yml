@@ -119,6 +119,12 @@ subcommands:
                 takes_value: true
                 required: false
                 help: path to aligner e.g. /app/software/CellRanger/6.0.1/lib/bin/STAR
+            # - aligner_args:
+            #     long: aligner_args
+            #     short: x
+            #     takes_value: true
+            #     required: false
+            #     help: additional args supplied to aligner; wrap in quotes
             - read_len:
                 long: read_len
                 short: r

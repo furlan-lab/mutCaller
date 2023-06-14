@@ -2,7 +2,12 @@
 name = "mutcaller_rust"
 version = "0.3.0"
 edition = "2021"
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "Crate that allows to read and write BAM, SAM and BGZIP files, written completely in Rust."
+repository = "https://github.com/furlan-lab/mutCaller"
+readme = "README.md"
+license = "MIT"
+documentation = "https://github.com/furlan-lab/mutCaller"
+exclude = [".gitignore"]
 
 [dependencies]
 # bam = "0.1.4"
@@ -19,6 +24,7 @@ csv = "1.1.6"
 itertools = "0.10.0"
 rayon = "1.7.0"
 log = "0.4"
+vcf = "0.6.1"
 simplelog = { version = "^0.11.0", features = ["paris"] }
 
 

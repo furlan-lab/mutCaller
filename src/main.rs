@@ -6,6 +6,8 @@ use clap::{App, load_yaml};
 
 pub mod mutcaller;
 pub mod countbam;
+pub mod vcf;
+
 use crate::mutcaller::mutcaller_run;
 use crate::countbam::{countbam_run};
 

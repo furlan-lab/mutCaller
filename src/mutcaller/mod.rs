@@ -1,51 +1,5 @@
 /**
 
-
-Full pipeline in 1 command...
-
-cd ~/develop/mutCaller/tests
-cargo build --release
-../target/release/mutcaller --help
-
-bc=~/develop/mutCaller/data/737K-august-2016.txt.gz
-
-fa=/Users/sfurlan/refs/genome.fa
-fa=/fh/fast/furlan_s/grp/refs/GRCh38/refdata-gex-GRCh38-2020-A/fasta/genome.fa
-ml minimap2/2.24-GCCcore-11.2.0
-ml SAMtools/1.17-GCC-12.2.0
-../target/release/mutcaller UNALIGNED \
-                        -t 8 -g $fa -b $bc -v variants.tsv \
-                        -o out_mm2 --fastq1 sequencer_R1.fastq.gz \
-                        --fastq2 sequencer_R2.fastq.gz
-
-bc=~/develop/mutCaller/data/737K-august-2016.txt.gz
-ml SAMtools/1.17-GCC-12.2.0
-fa=/fh/fast/furlan_s/grp/refs/GRCh38/refdata-gex-GRCh38-2020-A/star
-../target/release/mutcaller UNALIGNED \
-                        -t 8 -g $fa -b $bc -v variants.tsv -a STAR -l /app/software/CellRanger/6.0.1/lib/bin/STAR \
-                        -o out_star --fastq1 sequencer_R1.fastq.gz \
-                        --fastq2 sequencer_R2.fastq.gz
-
-
-
-###compare to cbsniffer
-mkdir cbsniffer
-cd cbsniffer
-../../src/archive/mutcaller -u -U 10 -b /Users/sfurlan/develop/mutCaller/tests/sequencer_R1.fastq.gz -t /Users/sfurlan/develop/mutCaller/tests/sequencer_R2.fastq.gz -l $bc &&
-export fq2=$OUT/fastq_processed/sample_filtered.fastq &&
-export fq3=$OUT/fastq_processed/sample_filtered_header.fastq &&
-~/develop/mutCaller/mutcaller_rust/target/debug/fastq -t 1 --ifastq ${fq2} > ${fq3}
-/app/software/CellRanger/6.0.1/lib/bin/STAR --genomeDir $transcriptome/star --readFilesIn ${fq3} --readNameSeparator space \
-  --runThreadN 24 --outSAMunmapped Within KeepPairs --outSAMtype BAM SortedByCoordinate &&
-Rscript ~/develop/mutCaller/scripts/quantReads.R &&
-~/develop/mutCaller/addTags.py -u 10 -c 16 Aligned.sortedByCoord.out.bam | samtools view -hbo Aligned.out.tagged.sorted.bam &&
-samtools index -@ 24 Aligned.out.tagged.sorted.bam
-# rm Aligned.sortedByCoord.out.bam &&
-# rm fastq.log Log.out Log.progress.out r1.fq.gz r2.fq.gz SJ.out.tab slurm* &&
-# rm -R fastq_processed &&
-# rm -R mutcaller
-
-
 **/
 
 extern crate simplelog;
@@ -111,7 +65,7 @@ impl fmt::Display for Variant {
 
 
 #[derive(Debug)]
-pub struct Params {
+pub struct Params <'a> {
     pub fastq1: String,
     pub fastq2: String,
     pub genome: String,
@@ -121,6 +75,7 @@ pub struct Params {
     pub threads: usize,
     pub aligner: String,
     pub aligner_loc: String,
+    pub aligner_args: Box<[&'a str]>,
     pub variants: String,
     pub read_len: usize,
     pub output_path: Box<Path>,
@@ -140,7 +95,7 @@ pub struct Params {
 
 
 
-fn load_params() -> Params {
+fn load_params() -> Params <'static>{
     let yaml = load_yaml!("../cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
     let params = matches.subcommand_matches("UNALIGNED").unwrap();
@@ -159,9 +114,13 @@ fn load_params() -> Params {
     let read_len = read_len.to_string().parse::<usize>().unwrap();
     let aligner = params.value_of("aligner").unwrap_or("minimap2");
     let mut aligner_loc = aligner;
+    let aligner_args = ["--sr", "--splice"];
     if params.is_present("aligner_loc") {
         aligner_loc = params.value_of("aligner_loc").unwrap();
     }
+    // if params.is_present("aligner_args") {
+    //     aligner_args = params.value_of("aligner_args").unwrap();
+    // }
     let variantstring = params.value_of("variants").unwrap();
     let mut _verbose = true;
     if params.is_present("quiet") {
@@ -200,6 +159,7 @@ fn load_params() -> Params {
         cb_len: cb_len as usize,
         aligner: aligner.to_string(),
         aligner_loc: aligner_loc.to_string(),
+        aligner_args:  Box::new(aligner_args),
         variants: variantstring.to_string(),
         read_len: read_len as usize,
         keep: keep,
@@ -283,6 +243,7 @@ pub fn check_params(params: Params) -> Result<Params, Box<dyn Error>>{
             cb_len: params.cb_len,
             aligner: params.aligner,
             aligner_loc: params.aligner_loc,
+            aligner_args: params.aligner_args,
             variants: params.variants,
             read_len: params.read_len,
             keep: params.keep,
@@ -421,37 +382,14 @@ fn align (params: &Params)-> Result<(), Box<dyn Error>> {
     let align_sorted_bam = &params.output_path.join("Aligned.sortedByCoord.out.bam").clone().to_owned();
     let fastq = &params.output_path.join("mutcaller_R1.fq.gz").clone().to_owned();
     let outfolder = &params.output_path.join("").clone().to_owned();
-    // let mm_cmd = "/Users/sfurlan/.local/bin/minimap2";
-    // let mm_args = "-h";
-    // let mm_args_pre = format!("-a {} -t {} mutcaller_R1.fq.gz | samtools sort -@ {} | samtools view -@ {} -o Aligned.mm2.bam", params.genome.to_string(), params.threads.to_string(), params.threads.to_string(), params.threads.to_string());
-    // let mm_args_vec = mm_args_pre.split(" ").collect::<Vec<&str>>();
-    // let mm_args = OsString::new();
-    // let mm_args = OsString::from(mm_args_pre);
-    // let mm_cmd = "/Users/sfurlan/.local/bin/minimap2";
-    // let mm_cmd = "ls";
-    // let st_cmd = format!("sammtools index -@ {} Aligned.mm2.bam", params.threads.to_string());
-    // let output = Command::new("echo")
-    //                  .arg("Hello world")
-    //                  .output()
-    //                  .expect("Failed to execute command");
-
-    // eprintln!("{:?}", &mm_args);
-    // let output = Command::new(mm_cmd)
-    //                 .arg(mm_args)
-    //                  .output()
-    //                  .expect("Failed to execute minimap2");
-    // let output = Command::new("/Users/sfurlan/.local/bin/minimap2")
-    //                 .arg("-h")
-    //                  .output()
-    //                  .expect("Failed to execute minimap2");
     if params.aligner == "minimap2" {
         if params.verbose {
         eprintln!("{}", "Aligning reads using minimap2");
         }
         info!("{}", "Aligning reads using minimap2");
         let output = Command::new(&params.aligner_loc)
-                        .arg("--MD")
-                        .arg("-Y")
+                        .args(["--MD", "-Y"])
+                        .args(&*params.aligner_args)
                         .arg("-a")
                         .arg(params.genome.to_string())
                         .arg("-t")
@@ -461,8 +399,9 @@ fn align (params: &Params)-> Result<(), Box<dyn Error>> {
                         .arg(align_sam.to_str().unwrap())
                         .stderr(Stdio::piped())
                         .stdout(Stdio::piped())
-                         .output()
-                         .expect("\n\n*******Failed to execute minimap2*******\n\n");
+                        .output()
+                        .expect("\n\n*******Failed to execute minimap2*******\n\n");
+
         if params.verbose {
             eprintln!("{}", String::from_utf8_lossy(&output.stderr));
             eprintln!("{}", "Minimap2 complete; Running samtools sort");

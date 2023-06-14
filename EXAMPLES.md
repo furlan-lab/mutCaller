@@ -19,7 +19,19 @@ loc=~/develop/mutCaller # or location where you have cloned the repository
 bc=$loc/data/737K-august-2016.txt.gz  #barcode whitelist
 fa=/Users/sfurlan/refs/genome.fa #genome location i.e. GRCh38
 #fa=/fh/fast/furlan_s/grp/refs/GRCh38/refdata-gex-GRCh38-2020-A/fasta/genome.fa
-mutcaller UNALIGNED -t 8 -g $fa -b $bc -v $loc/tests/variants.tsv \
+mutcaller UNALIGNED -t 8 -g $fa -b $bc -v $loc/tests/variants.tsv -o out_mm2 \
+          --fastq1 $loc/tests/sequencer_R1.fastq.gz \
+          --fastq2 $loc/tests/sequencer_R2.fastq.gz
+```
+
+### Run UNALIGNED on short read fastqs using mm2 with extra arguments
+
+```sh
+loc=~/develop/mutCaller # or location where you have cloned the repository
+bc=$loc/data/737K-august-2016.txt.gz  #barcode whitelist
+fa=/Users/sfurlan/refs/genome.fa #genome location i.e. GRCh38
+#fa=/fh/fast/furlan_s/grp/refs/GRCh38/refdata-gex-GRCh38-2020-A/fasta/genome.fa
+mutcaller UNALIGNED -t 8 -g $fa -b $bc -v $loc/tests/variants.tsv -o out_mm2 \
           --fastq1 $loc/tests/sequencer_R1.fastq.gz \
           --fastq2 $loc/tests/sequencer_R2.fastq.gz
 ```
@@ -30,11 +42,39 @@ mutcaller UNALIGNED -t 8 -g $fa -b $bc -v $loc/tests/variants.tsv \
 loc=~/develop/mutCaller # or location where you have cloned the repository
 bc=$loc/data/737K-august-2016.txt.gz  #barcode whitelist
 fa=/fh/fast/furlan_s/grp/refs/GRCh38/refdata-gex-GRCh38-2020-A/star
-../target/release/mutcaller UNALIGNED \
-                        -t 8 -g $fa -b $bc -v variants.tsv -a STAR -l /app/software/CellRanger/6.0.1/lib/bin/STAR \
-                        -o out_star --fastq1 sequencer_R1.fastq.gz \
-                        --fastq2 sequencer_R2.fastq.gz
+ml SAMtools/1.11-GCC-10.2.0 #make sure samtools is accessible
+mutcaller UNALIGNED \
+                        -t 8 -g $fa -b $bc -v $loc/tests/variants.tsv -a STAR -l /app/software/CellRanger/6.0.1/lib/bin/STAR \
+                        -o out_star --fastq1 $loc/tests/sequencer_R1.fastq.gz \
+                        --fastq2 $loc/tests/sequencer_R2.fastq.gz
+```
 
+
+### Compare to cbsniffer
+
+```sh
+loc=~/develop/mutCaller # or location where you have cloned the repository
+bc=$loc/data/737K-august-2016.txt.gz  #barcode whitelist
+out=$loc/cbsniffer
+mkdir $out
+cd $out
+$loc/src/archive/mutcaller -u -U 10 -b $loc/tests/sequencer_R1.fastq.gz -t $loc/tests/sequencer_R2.fastq.gz -l $bc &&
+export fq2=$out/fastq_processed/sample_filtered.fastq &&
+export fq3=$out/fastq_processed/sample_filtered_header.fastq &&
+~/develop/mutCaller/mutcaller_rust/target/debug/fastq -t 1 --ifastq ${fq2} > ${fq3}
+/app/software/CellRanger/6.0.1/lib/bin/STAR --genomeDir $transcriptome/star --readFilesIn ${fq3} --readNameSeparator space \
+  --runThreadN 24 --outSAMunmapped Within KeepPairs --outSAMtype BAM SortedByCoordinate &&
+Rscript ~/develop/mutCaller/scripts/quantReads.R &&
+~/develop/mutCaller/addTags.py -u 10 -c 16 Aligned.sortedByCoord.out.bam | samtools view -hbo Aligned.out.tagged.sorted.bam &&
+samtools index -@ 24 Aligned.out.tagged.sorted.bam
+# rm Aligned.sortedByCoord.out.bam &&
+# rm fastq.log Log.out Log.progress.out r1.fq.gz r2.fq.gz SJ.out.tab slurm* &&
+# rm -R fastq_processed &&
+# rm -R mutcaller
+```
+
+
+```sh
 
 
 cd /fh/scratch/delete90/furlan_s/targ_reseq/230117_Sami/AML_1101_merge/align_nodedup

@@ -83,7 +83,7 @@ extern crate rayon;
 
 // use std::io;
 use clap::{App, load_yaml};
-use std::{env, str, fs, path::Path, path::PathBuf, io};
+use std::{env, str, fs, path::Path, path::PathBuf};
 use std::error::Error;
 use serde::Deserialize;
 use std::fmt; 
@@ -94,7 +94,7 @@ use itertools::Itertools;
 use flate2::GzBuilder;
 use flate2::Compression;
 use rayon::prelude::*;
-use std::ops::ControlFlow;
+// use std::ops::ControlFlow;
 // use simplelog::{Config, WriteLogger, SimpleLogger, CombinedLogger, LevelFilter, info, warn};
 // use std::sync::Mutex;
 // use core::iter::Map;
