@@ -67,7 +67,7 @@ samtools view -b aln_sncr_fc_Malig.mdtag.bam "chr14:31113320-31113321" > breaksi
 
 
 ~/develop/mutCaller/target/release/mutcaller ALIGNED -b breaksit2.bam -v breaksit.tsv -t 1 -out_long
-
+zcat < ut_long/counts.txt.gz
 
 */
 
@@ -83,7 +83,7 @@ extern crate rayon;
 
 // use std::io;
 use clap::{App, load_yaml};
-use std::{env, str, fs, path::Path, path::PathBuf};
+use std::{env, str, fs, path::Path, path::PathBuf, io};
 use std::error::Error;
 use serde::Deserialize;
 use std::fmt; 
@@ -651,10 +651,56 @@ fn count_variants_wrapper(params: &Params, variant: Variant) -> Vec<Vec<u8>>{
         //         }        
         // });
 
-        let iter = record.as_ref().unwrap().alignment_entries().unwrap();
-        let mut new_iter = iter.map_while(|entry| {
-            eprintln!("{:?}", entry);
-            if let Some((ref_pos, ref_nt)) = entry.ref_pos_nt() {
+        // let iter = record.as_ref().unwrap().alignment_entries().unwrap();
+        // let mut new_iter = iter.map_while(|entry| {
+        //     eprintln!("{:?}", entry);
+        //     if let Some((ref_pos, ref_nt)) = entry.ref_pos_nt() {
+        //         if region.start() == ref_pos {
+        //             if let Some((_record_pos, record_nt)) = entry.record_pos_nt() {
+        //                 if ref_nt as char == record_nt as char {
+        //                     _result = "ref";
+        //                 } else if record_nt as char == query_nt{
+        //                     _result = "query";
+        //                 } else {
+        //                     _result = "other";
+        //                 }
+        //                     eprintln!("pushting data");
+        //                     data.push(format!("{} {} {} {} {} {}", _cb, _umi, seqname, ref_pos, vname, _result));
+        //                     return Some(entry)
+        //             } else {
+        //                 return Some(entry)
+        //             }
+
+        //         } else {
+        //             return Some(entry)
+        //         }
+        //     } else {
+        //         return Some(entry)
+        //     }      
+        // });
+
+        for entry in record.as_ref().unwrap().alignment_entries().unwrap(){
+            // let do_steps = || -> Result<(), io::Error> {
+            //     // eprintln!("Testing entry: {:?}", &entry);
+            //     let rec = entry.record_pos_nt().unwrap();
+            //     eprintln!("Rec pos: {:?}", char::from_u32(rec.0));
+            //     eprintln!("Rec NT: {:?}", rec.1 as char);
+            //     let refe = entry.ref_pos_nt().unwrap();
+            //     eprintln!("Ref pos: {:?}", char::from_u32(refe.0));
+            //     eprintln!("Ref NT: {:?}", refe.1 as char);
+            //     // test_alignment(&record)?;
+            //     // eprintln!("Entry okay!");
+            //     Ok(())
+            // };
+            // if let Err(_err) = do_steps() {
+            //     if params.verbose{
+            //         eprintln!("Failed to get entry: {:?}", record.as_ref().unwrap().name());
+            //     }
+            //     error!("Failed to get entry: {:?}", record.as_ref().unwrap().name());
+            //     continue
+            // }
+            //  eprintln!("{:?}", entry);
+           if let Some((ref_pos, ref_nt)) = entry.ref_pos_nt() {
                 if region.start() == ref_pos {
                     if let Some((_record_pos, record_nt)) = entry.record_pos_nt() {
                         if ref_nt as char == record_nt as char {
@@ -664,63 +710,16 @@ fn count_variants_wrapper(params: &Params, variant: Variant) -> Vec<Vec<u8>>{
                         } else {
                             _result = "other";
                         }
-                            eprintln!("pushting data");
-                            data.push(format!("{} {} {} {} {} {}", _cb, _umi, seqname, ref_pos, vname, _result));
-                            return Some(entry)
+                            // eprintln!("pushting data");
+                            data.push(format!("{} {} {} {} {} {}", _cb, _umi, seqname, ref_pos, vname, _result))
+                        }
                     } else {
-                        return Some(entry)
+                        continue
                     }
-
-                } else {
-                    return Some(entry)
-                }
             } else {
-                return Some(entry)
-            }      
-        });
-
-        // for entry in record.as_ref().unwrap().alignment_entries(){
-        //     // let do_steps = || -> Result<(), io::Error> {
-        //     //     // eprintln!("Testing entry: {:?}", &entry);
-        //     //     let rec = entry.record_pos_nt().unwrap();
-        //     //     eprintln!("Rec pos: {:?}", char::from_u32(rec.0));
-        //     //     eprintln!("Rec NT: {:?}", rec.1 as char);
-        //     //     let refe = entry.ref_pos_nt().unwrap();
-        //     //     eprintln!("Ref pos: {:?}", char::from_u32(refe.0));
-        //     //     eprintln!("Ref NT: {:?}", refe.1 as char);
-        //     //     // test_alignment(&record)?;
-        //     //     // eprintln!("Entry okay!");
-        //     //     Ok(())
-        //     // };
-        //     // if let Err(_err) = do_steps() {
-        //     //     if params.verbose{
-        //     //         eprintln!("Failed to get entry: {:?}", record.as_ref().unwrap().name());
-        //     //     }
-        //     //     error!("Failed to get entry: {:?}", record.as_ref().unwrap().name());
-        //     //     continue
-        //     // }
-        //      // eprintln!("{:?}", entry);
-        // //    if let Some((ref_pos, ref_nt)) = entry.ref_pos_nt() {
-        // //         if region.start() == ref_pos {
-        // //             if let Some((_record_pos, record_nt)) = entry.record_pos_nt() {
-        // //                 if ref_nt as char == record_nt as char {
-        // //                     _result = "ref";
-        // //                 } else if record_nt as char == query_nt{
-        // //                     _result = "query";
-        // //                 } else {
-        // //                     _result = "other";
-        // //                 }
-        // //                     eprintln!("pushting data");
-        // //                     data.push(format!("{} {} {} {} {} {}", _cb, _umi, seqname, ref_pos, vname, _result))
-        // //                 }
-        // //             } else {
-        // //                 continue
-        // //             }
-        // //     } else {
-        // //         continue
-        // //     }        
-        // }
-
+                continue
+            }        
+        }
     }
      // data.push(format!("whatever"));
     info!("\n\n\tFound {} reads spanning this variant!\n\tNumbers of errors: {}\n", total, err);

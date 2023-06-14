@@ -5,7 +5,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bam = "0.1.4"
+# bam = "0.1.4"
+bam = { git = "https://gitlab.com/scfurl/bam.git", version = "0.1.5" }
 clap = { version = "2.33.0", features = ["yaml"] }
 fastq = "0.6.0"
 flate2 = "1.0.24"
