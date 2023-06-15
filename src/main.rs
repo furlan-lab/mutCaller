@@ -8,8 +8,10 @@ pub mod vcf;
 
 use crate::mutcaller::mutcaller_run;
 use crate::countbam::{countbam_run};
-use crate::vcf::{read_vcf_compressed, read_vcf_uncompressed, guess_vcf, guess_compression};
+use crate::vcf::{read_vcf_compressed, read_vcf_uncompressed, guess_vcf, guess_compression, variants_writer_fn};
 use crate::mutcaller::read_csv_str;
+
+
 
 fn main() {
     let yaml = load_yaml!("cli.yml");
@@ -20,11 +22,15 @@ fn main() {
 	if let Some(_params) = params.subcommand_matches("ALIGNED") {
     	countbam_run()
 	}
-    if let Some(params) = params.subcommand_matches("VCF") {
+    if let Some(params) = params.subcommand_matches("VARIANTS") {
         let qual = params.value_of("qual").unwrap_or("95.0");
         let mut verbose = true;
         if params.is_present("quiet") {
                 verbose = false
+        };
+        let mut make_variants = "false";
+        if params.is_present("make_variants") {
+                make_variants = params.value_of("make_variants").unwrap();
         };
         let qual_p = qual.parse::<f64>();
         let vcf_file = params.value_of("variants").unwrap_or("/Users/sfurlan/develop/mutCaller/tests/var.vcf.gz").to_string();
@@ -45,9 +51,15 @@ fn main() {
             }
         };
         eprintln!("Records:\n");
-        for variant in data {
+        for variant in &data {
             eprintln!("{}", variant);
         }
+        if make_variants != "false" {
+            let res = variants_writer_fn(make_variants.to_string(), data);
+            if verbose && res.unwrap()== () {
+                eprintln!("Created variants file: {}\n", make_variants);
+            }
+        }   
     }
 
 }

@@ -52,7 +52,7 @@ chr17   7674220 C   T   TP53_248C>T
 
 #### VCF support
 
-Mutcaller will also accept VCF.  Not all versions have been tested.  With the VARIANTS function, a user can filter records from a VCF and optionally output a variants.tsv.  It is also possible to supply a VCF to the ALIGNED and UNALIGNED functions in mutcaller directly.  See additional [here](EXAMPLES.md)
+Mutcaller will also accept VCF.  Not all versions have been tested.  With the VARIANTS function, a user can filter records from a VCF and optionally output a variants.tsv.  It is also possible to supply a VCF to the ALIGNED and UNALIGNED functions in mutcaller directly.  See examples [here](EXAMPLES.md)
 
 #### Barcodes file
 

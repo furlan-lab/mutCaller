@@ -5,10 +5,14 @@
 
 use vcf::{VCFReader, VCFHeaderFilterAlt, VCFError};
 use flate2::read::MultiGzDecoder;
+use flate2::GzBuilder;
+use flate2::Compression;
 use std::fs::File;
 use std::io::{BufReader, BufRead};
 use crate::mutcaller::Variant;
 use std::path::Path;
+use std::error::Error;
+use std::io::Write;
 
 
 pub fn guess_vcf(file: &String) -> Result<bool, VCFError>{
@@ -172,3 +176,19 @@ pub fn read_vcf_uncompressed(file: &String, qual: &f64, verbose: &bool) -> Resul
     }
     Ok(data)
 }
+
+
+pub fn variants_writer_fn (file: String, variants: Vec<Variant>) -> Result<(), Box<dyn Error>> {
+        let f = File::create(file.clone())?;
+        let mut gz = GzBuilder::new()
+                        .filename(file)
+                        .write(f, Compression::default());
+        gz.write_all(format!("seq\tstart\tref_nt\tquery_nt\tname\n").as_bytes())?;
+        for variant in variants {
+                // gz.write_all(&variant)?;
+                gz.write(format!("{}\t{}\t{}\t{}\t{}\n", &variant.seq, &variant.start, &variant.ref_nt, &variant.query_nt, &variant.name).as_bytes())?;
+        }
+        gz.finish()?;
+        Ok(())
+}
+

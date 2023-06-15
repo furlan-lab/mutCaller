@@ -77,23 +77,31 @@ python $loc/scripts/cb_sniffer.py Aligned.out.tagged.sorted.bam $loc/tests/varia
 ### Check a variants.tsv file to make sure it is compatible (zipped and unzipped ok)
 ```sh
 loc=~/develop/mutCaller 
-mutcaller VCF -s $loc/tests/variants.tsv
-mutcaller VCF -s $loc/tests/variants.tsv.gz
+mutcaller VARIANTS -s $loc/tests/variants.tsv
+mutcaller VARIANTS -s $loc/tests/variants.tsv.gz
 ```
 
 ### Look at variants file (VCF format) after filtering out quality scores below 98 (zipped and unzipped ok)
 ```sh
 loc=~/develop/mutCaller 
 cargo build --release && cp ~/develop/mutCaller/target/release/mutcaller ~/.local/bin
-mutcaller VCF -s $loc/tests/var.vcf.gz -q 98
+mutcaller VARIANTS -s $loc/tests/var.vcf.gz -q 98
 ```
 
+
+### Make variants.tsv file from filtered vcf
+```sh
+loc=~/develop/mutCaller
+mutcaller VARIANTS -s $loc/tests/var.vcf.gz -q 98 -m variants_from_vcf.tsv -v
+```
 
 ### Run ALIGNED on a bam file using VCF file filtered on 98
 ```sh
 loc=~/develop/mutCaller
 mutcaller ALIGNED -b $loc/tests/lr.bam -s $loc/tests/var.vcf.gz -q 98 -t 1 -o out_long
 ```
+
+
 
 # THANKS FOR TRYING mutCaller!!
 

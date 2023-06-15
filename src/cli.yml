@@ -3,7 +3,7 @@ version: "0.4.0"
 author: Scott Furlan
 about: Single nucleotide variant counting pipeline for single cell genomics data
 subcommands:
-    - VCF:
+    - VARIANTS:
         name: "VARIANTS"
         about: "variants file debugging"
         args:
@@ -25,6 +25,12 @@ subcommands:
                 takes_value: false
                 required: false
                 help: use this flag to run in verbose mode
+            - make_variants:
+                long: make_variants
+                short: m
+                takes_value: true
+                required: false
+                help: use this argument to make a variants file from a VCF; supplied argument is the desired name of variants file e.g. 'variants.tsv'
     - ALIGNED:
         name: "ALIGNED"
         about: "Count variants in previously aligned data"
