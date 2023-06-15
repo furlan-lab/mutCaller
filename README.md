@@ -27,7 +27,7 @@ To install mutCaller:
 
 ### Usage
 
-#### Variants file (sser generated)
+#### Variants file (user generated tsv)
 
 Users can generate a simple, 'variants_file' that lists the variants to be counted (tsv.file). The variants file should look like this:
 
@@ -49,6 +49,10 @@ chr12   112450407   A   G   PTPN11_227A>G
 chr12   208248389   G   A   IDH1_132G>A
 chr17   7674220 C   T   TP53_248C>T
 ```
+
+#### VCF support
+
+Mutcaller will also accept VCF.  Not all versions have been tested.  With the VARIANTS function, a user can filter records from a VCF and optionally output a variants.tsv.  It is also possible to supply a VCF to the ALIGNED and UNALIGNED functions in mutcaller directly.  See additional [here](EXAMPLES.md)
 
 #### Barcodes file
 
