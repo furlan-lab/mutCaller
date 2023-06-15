@@ -1,4 +1,4 @@
-<img width="500" alt="image" src="mutcaller.png">
+<img width="400" alt="image" src="mutcaller.png">
 
 
 #                       mutCaller
