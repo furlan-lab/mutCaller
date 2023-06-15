@@ -1,7 +1,5 @@
 <img width="300" alt="image" src="mutcaller.png">
 
-
-#                       mutCaller
 Pipeline for extracting variants from single cell genomics data
 
 
