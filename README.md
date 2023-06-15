@@ -22,9 +22,9 @@ To install mutCaller:
 
 ### Updates
 
-**version 0.40** - 6/14/23 - majorcode cleanup, added STAR aligner option, added vcf file support including a VARIANT subfunction that allows you to troubleshoot variants files
-**version 0.30** - 5/9/23 - code cleanup and implemented bam option
-**version 0.22** - 5/9/23 - first alpha release
+- **version 0.40** - 6/14/23 - majorcode cleanup, added STAR aligner option, added vcf file support including a VARIANT subfunction that allows you to troubleshoot variants files
+- **version 0.30** - 5/9/23 - code cleanup and implemented bam option
+- **version 0.22** - 5/9/23 - first alpha release
 
 
 ### Usage
