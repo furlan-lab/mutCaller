@@ -9,7 +9,7 @@ mutCaller is a command line tool written in Rust for identifying SNVs in single 
 
 ### Installation
 
-mutCaller is written in Rust.  To install the rust compiler go to https://www.rust-lang.org/tools/install.  mutCaller requires two additional tools be available on the command line, minimap2 (https://github.com/lh3/minimap2) and samtools (https://samtools.github.io). 
+mutCaller is written in Rust.  To install the rust compiler go to https://www.rust-lang.org/tools/install.  mutCaller requires additional tools be available on the command line, minimap2 (https://github.com/lh3/minimap2) or STAR (https://github.com/alexdobin/STAR) and samtools (https://samtools.github.io). 
 
 To install mutCaller:
 1. clone the repository by typing `https://github.com/furlan-lab/mutCaller.git` from the location you want to build from
