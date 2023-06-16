@@ -96,9 +96,10 @@ pub fn read_vcf_compressed(file: &String, qual: &f64, verbose: &bool) -> Result<
             data.push(Variant{
                 seq: String::from_utf8_lossy(&vcf_record.chromosome).to_string(),
                 start: vcf_record.position.to_string(),
-                ref_nt: String::from_utf8_lossy(rec).to_string().chars().nth(0).unwrap(),
-                query_nt: String::from_utf8_lossy(alt).to_string().chars().nth(0).unwrap(),
+                ref_nt: String::from_utf8_lossy(rec).to_string().chars().nth(0).unwrap().to_string(),
+                query_nt: String::from_utf8_lossy(alt).to_string().chars().nth(0).unwrap().to_string(),
                 name: vname.to_string(),
+                class: None
             })
         } else {
             continue
@@ -163,9 +164,10 @@ pub fn read_vcf_uncompressed(file: &String, qual: &f64, verbose: &bool) -> Resul
             data.push(Variant{
                 seq: String::from_utf8_lossy(&vcf_record.chromosome).to_string(),
                 start: vcf_record.position.to_string(),
-                ref_nt: String::from_utf8_lossy(rec).to_string().chars().nth(0).unwrap(),
-                query_nt: String::from_utf8_lossy(alt).to_string().chars().nth(0).unwrap(),
+                ref_nt: String::from_utf8_lossy(rec).to_string().chars().nth(0).unwrap().to_string(),
+                query_nt: String::from_utf8_lossy(alt).to_string().chars().nth(0).unwrap().to_string(),
                 name: vname.to_string(),
+                class: None
             })
         } else {
             continue

@@ -3,7 +3,7 @@
 
 #                       mutCaller working examples
 
-### Build mutCaller and install binary
+##### Build mutCaller and install binary
 
 ```sh
 loc=~/develop/mutCaller # or location where you have cloned the repository
@@ -11,7 +11,7 @@ cd $loc
 cargo build --release && cp target/release/mutcaller ~/.local/bin
 ```
 
-### Run UNALIGNED on short read fastqs using mm2
+##### Run UNALIGNED on short read fastqs using mm2
 
 ```sh
 loc=~/develop/mutCaller # or location where you have cloned the repository
@@ -24,7 +24,7 @@ mutcaller UNALIGNED -t 8 -g $fa -b $bc -s $loc/tests/variants.tsv -o out_mm2 \
 ```
 
 
-### Run UNALIGNED on short read fastqs using STAR (better performance on short reads than mm2 for unclear reasons)
+##### Run UNALIGNED on short read fastqs using STAR (better performance on short reads than mm2 for unclear reasons)
 
 ```sh
 loc=~/develop/mutCaller # or location where you have cloned the repository
@@ -38,7 +38,7 @@ mutcaller UNALIGNED \
 ```
 
 
-### Compare to cbsniffer
+##### Compare to cbsniffer
 
 ```sh
 loc=~/develop/mutCaller # or location where you have cloned the repository
@@ -74,14 +74,14 @@ python $loc/scripts/cb_sniffer.py Aligned.out.tagged.sorted.bam $loc/tests/varia
 
 ```
 
-### Check a variants.tsv file to make sure it is compatible (zipped and unzipped ok)
+##### Check a variants.tsv file to make sure it is compatible (zipped and unzipped ok)
 ```sh
 loc=~/develop/mutCaller 
 mutcaller VARIANTS -s $loc/tests/variants.tsv
 mutcaller VARIANTS -s $loc/tests/variants.tsv.gz
 ```
 
-### Look at variants file (VCF format) after filtering out quality scores below 98 (zipped and unzipped ok)
+##### Look at variants file (VCF format) after filtering out quality scores below 98 (zipped and unzipped ok)
 ```sh
 loc=~/develop/mutCaller 
 cargo build --release && cp ~/develop/mutCaller/target/release/mutcaller ~/.local/bin
@@ -89,13 +89,13 @@ mutcaller VARIANTS -s $loc/tests/var.vcf.gz -q 98
 ```
 
 
-### Make variants.tsv file from filtered vcf
+##### Make variants.tsv file from filtered vcf
 ```sh
 loc=~/develop/mutCaller
 mutcaller VARIANTS -s $loc/tests/var.vcf.gz -q 98 -m variants_from_vcf.tsv -v
 ```
 
-### Run ALIGNED on a bam file using VCF file filtered on 98
+##### Run ALIGNED on a bam file using VCF file filtered on 98
 ```sh
 loc=~/develop/mutCaller
 mutcaller ALIGNED -b $loc/tests/lr.bam -s $loc/tests/var.vcf.gz -q 98 -t 1 -o out_long
@@ -103,7 +103,7 @@ mutcaller ALIGNED -b $loc/tests/lr.bam -s $loc/tests/var.vcf.gz -q 98 -t 1 -o ou
 
 
 
-# THANKS FOR TRYING mutCaller!!
+## THANKS FOR TRYING mutCaller!!
 
 
 

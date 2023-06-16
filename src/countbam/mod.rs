@@ -305,7 +305,7 @@ fn count_variants_wrapper(params: &Params, variant: Variant) -> Vec<Vec<u8>>{
     let seqname = variant.seq;
     let start = variant.start.parse::<u32>().unwrap();
     let vname = variant.name;
-    let query_nt = variant.query_nt as char;
+    let query_nt = variant.query_nt.chars().nth(0).unwrap();
     let mut reader = bam::IndexedReader::build()
         // .additional_threads(*&params.threads as u16)
         .from_path(ibam).unwrap();

@@ -41,23 +41,34 @@ use crate::countbam::get_current_working_dir;
 use crate::countbam::cleanup;
 use crate::vcf::{guess_vcf, guess_compression, read_vcf_compressed, read_vcf_uncompressed};
 
-
 #[derive(Deserialize)]
 #[derive(Debug)]
 #[derive(Clone)]
 pub struct Variant {
     pub seq: String,
     pub start: String,
-    pub ref_nt: char,
-    pub query_nt: char,
+    pub ref_nt: String,
+    pub query_nt: String,
     pub name: String,
+    pub class: Option<VariantClass>,
+}
+
+#[derive(Deserialize)]
+#[derive(Debug)]
+#[derive(Clone)]
+#[derive(PartialEq)]
+pub enum VariantClass {
+    SNV,
+    MNV,
+    Insertion,
+    Deletion
 }
 
 // Implement `Display` for `Variant`.
 impl fmt::Display for Variant {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // Use `self.number` to refer to each positional data point.
-        write!(f, "seq: {} start: {} ref_nt: {} query_nt: {} name: {}", self.seq, self.start, self.ref_nt, self.query_nt, self.name)
+        write!(f, "seq: {} start: {} ref_nt: {} query_nt: {} name: {} class: {:?}", self.seq, self.start, self.ref_nt, self.query_nt, self.name, self.class.as_ref().unwrap())
     }
 }
 
@@ -226,67 +237,37 @@ pub fn check_params(params: Paramsm) -> Result<Paramsm, Box<dyn Error>>{
 }
 
 
-pub fn read_csv(params: &Paramsm) -> Result<Vec<Variant>, Box<dyn Error>> {
+pub fn read_csv(params: Option<&Paramsm>, file_i: Option<String>, verbose_i: Option<bool>) -> Result<Vec<Variant>, Box<dyn Error>> {
     // Build the CSV reader and iterate over each record.
 //     let data = "\
 // seq\tstart\tref_nt\tquery_nt\tname
 // chr12\t112450407\tA\tG\tPTPN11_227A>G
 // chr2\t208248389\tG\tA\tIDH1_132G>A
 // chr17\t7674220\tC\tT\tTP53_248C>T";
-    let path = Path::new(&params.variants);
-    let compression = {
-        if path.extension().is_some() && path.extension().unwrap() == "gz" {
-                true
-            }else{
-                false
+    let file = {
+        if params.is_some(){
+            &params.unwrap().variants
+        } else {
+            file_i.as_ref().unwrap()
         }
     };
-    if compression {
-        if params.verbose {
-            eprintln!("Opening variants file: {}\n", &params.variants.to_string());
+
+    let verbose = {
+        if params.is_some(){
+            &params.unwrap().verbose
+        } else {
+            verbose_i.as_ref().unwrap()
         }
-        info!("Opening variants file: {}\n", &params.variants.to_string());
-        // let file = File::open(file.to_string()).unwrap();
-        let reader = BufReader::new(MultiGzDecoder::new(File::open(&params.variants.to_string()).unwrap()));
-        let mut rdr = ReaderBuilder::new()
-            .has_headers(true)
-            .delimiter(b'\t')
-            .from_reader(reader);
-        let mut csvdata = Vec::new();
-        for result in rdr.deserialize() {
-            let record: Variant = result?;
-            csvdata.push(record);
-        }
-        Ok(csvdata)
-    } else {
-        if params.verbose {
-            eprintln!("Opening variants file: {}\n", &params.variants.to_string());
-        }
-        info!("Opening variants file: {}\n", &params.variants.to_string());
-        let file = File::open(&params.variants.to_string()).unwrap();
-        let reader = BufReader::new(file);
-        let mut rdr = ReaderBuilder::new()
-            .has_headers(true)
-            .delimiter(b'\t')
-            .from_reader(reader);
-        let mut csvdata = Vec::new();
-        for result in rdr.deserialize() {
-            let record: Variant = result?;
-            csvdata.push(record);
-        }
-        Ok(csvdata)
+    };
+
+    #[derive(Deserialize)]
+    struct PreVariant {
+        seq: String,
+        start: String,
+        ref_nt: String,
+        query_nt: String,
+        name: String
     }
-}
-
-
-pub fn read_csv_str(file: String, verbose: bool) -> Result<Vec<Variant>, Box<dyn Error>> {
-    // Build the CSV reader and iterate over each record.
-//     let data = "\
-// seq\tstart\tref_nt\tquery_nt\tname
-// chr12\t112450407\tA\tG\tPTPN11_227A>G
-// chr2\t208248389\tG\tA\tIDH1_132G>A
-// chr17\t7674220\tC\tT\tTP53_248C>T";
-
     let path = Path::new(&file);
     let compression = {
         if path.extension().is_some() && path.extension().unwrap() == "gz" {
@@ -296,7 +277,7 @@ pub fn read_csv_str(file: String, verbose: bool) -> Result<Vec<Variant>, Box<dyn
         }
     };
     if compression {
-        if verbose {
+        if *verbose {
             eprintln!("Opening variants file: {}\n", file.to_string());
         }
         info!("Opening variants file: {}\n", file.to_string());
@@ -308,19 +289,19 @@ pub fn read_csv_str(file: String, verbose: bool) -> Result<Vec<Variant>, Box<dyn
             .from_reader(reader);
         let mut csvdata = Vec::new();
         for result in rdr.deserialize() {
-            let record: Variant = result?;
-            csvdata.push(record);
+            let prevariant: PreVariant = result?;
+            csvdata.push(Variant{
+                seq: prevariant.seq,
+                start: prevariant.start,
+                ref_nt: prevariant.ref_nt,
+                query_nt: prevariant.query_nt,
+                name: prevariant.name,
+                class: None,
+            });
         }
-        // let dummyvariant: Variant = Variant {seq: String::from("chr12"),
-        //         start: String::from("112450407"),
-        //         ref_nt: 'A',
-        //         query_nt: 'G',
-        //         name: String::from("PTPN11_227A>G"),
-        //     };
-        // csvdata.push(dummyvariant);
         Ok(csvdata)
     } else {
-        if verbose {
+        if *verbose {
             eprintln!("Opening variants file: {}\n", file.to_string());
         }
         info!("Opening variants file: {}\n", file.to_string());
@@ -332,8 +313,15 @@ pub fn read_csv_str(file: String, verbose: bool) -> Result<Vec<Variant>, Box<dyn
             .from_reader(reader);
         let mut csvdata = Vec::new();
         for result in rdr.deserialize() {
-            let record: Variant = result?;
-            csvdata.push(record);
+            let prevariant: PreVariant = result?;
+            csvdata.push(Variant{
+                seq: prevariant.seq,
+                start: prevariant.start,
+                ref_nt: prevariant.ref_nt,
+                query_nt: prevariant.query_nt,
+                name: prevariant.name,
+                class: None,
+            });
         }
         Ok(csvdata)
     }
@@ -365,7 +353,7 @@ pub fn mutcaller_run() {
                 read_vcf_uncompressed(&params.variants, &params.qual, &params.verbose)
             }
         } else {
-            Ok(read_csv(&params).unwrap())
+            Ok(read_csv(Some(&params), None, None).unwrap())
         }
     };
     info!("\n\n\tRunning with {} thread(s)!\n", &params.threads);
@@ -378,11 +366,15 @@ pub fn mutcaller_run() {
     let _ar = align(&params);
     let mut count_vec = Vec::new();
     for variant in csvdata.unwrap() {
+        let classified_variant = classify_variant(&variant);
         if params.verbose {
-            eprintln!("\nCorrectly parsed variant: {}", variant);
+            eprintln!("\nCorrectly parsed variant: {}", classified_variant.as_ref().unwrap());
         }
-        info!("\n\n\tCorrectly parsed variant: {}\n", variant);
-        count_vec.push(count_variants(&params, variant.clone()));
+        info!("\n\n\tCorrectly parsed variant: {}\n", classified_variant.as_ref().unwrap());
+        let data = count_variants_helper(&params, classified_variant.unwrap());
+        if data.is_some() {
+            count_vec.push(data.unwrap());
+        }
         // for svariant in variant{
         //     count_vec.push(count_variants(&params, svariant.clone()));
         // }
@@ -395,6 +387,26 @@ pub fn mutcaller_run() {
         eprintln!("\n\nDone!!");
         eprintln!("\n\nTime elapsed is: {:?}", duration);
     }
+}
+
+fn classify_variant (variant: &Variant) -> Result<Variant, Box<dyn Error>> {
+    let mut classified_variant = variant.clone();
+    if classified_variant.ref_nt.len() == 1 && classified_variant.query_nt.len() == 1{
+        classified_variant.class = Some(VariantClass::SNV);
+        return Ok(classified_variant)
+    }
+    if classified_variant.ref_nt.len() > 1 && classified_variant.query_nt.len() > 1{
+        classified_variant.class = Some(VariantClass::MNV);
+        return Ok(classified_variant)
+    }
+    if classified_variant.ref_nt.len() == 1 && classified_variant.query_nt.len() >= 1{
+        classified_variant.class = Some(VariantClass::Insertion);
+        return Ok(classified_variant)
+    }
+    classified_variant.class = Some(VariantClass::Deletion);
+    return Ok(classified_variant)
+    // return Err(e)
+    // return Ok(classified_variant)
 }
 
 // minimap2 --MD -a $fa -t 8 mutcaller_R1.fq.gz -o Aligned.mm2.sam
@@ -657,8 +669,20 @@ fn process_variant(ref_id: u32, start: u32)->bam::Region{
     return region;
 }
 
+fn count_variants_helper(params: &Paramsm, variant: Variant)-> Option<Vec<Vec<u8>>> {
+        if variant.class.clone().unwrap() == VariantClass::SNV {
+            return Some(count_variants_snv(params, variant))
+        }
+        warn!("\n\n\tVariant type {:?} not currently supported", variant.class.as_ref().unwrap());
+       if params.verbose {
+            eprintln!("\n\n\tVariant type {:?} not currently supported", variant.class.unwrap());
+        }
+        return None
+}
+
+
 #[allow(unused_comparisons)]
-fn count_variants(params: &Paramsm, variant: Variant) -> Vec<Vec<u8>>{
+fn count_variants_snv(params: &Paramsm, variant: Variant) -> Vec<Vec<u8>>{
     // eprintln!("Processing using cb and umi in header");
     let split = "|BARCODE=".to_string();
     let ibam_temp = &params.output_path.join("Aligned.sortedByCoord.out.bam").clone().to_owned();
@@ -673,7 +697,7 @@ fn count_variants(params: &Paramsm, variant: Variant) -> Vec<Vec<u8>>{
         .from_path(ibam).unwrap();
     let mut seqnames = Vec::new();
     let mut _result = "";
-    let query_nt = variant.query_nt as char;
+    let query_nt = variant.query_nt.chars().nth(0);
     let header = reader.header().clone();
     let hdata = header.reference_names();
     for seq in hdata {
@@ -707,7 +731,7 @@ fn count_variants(params: &Paramsm, variant: Variant) -> Vec<Vec<u8>>{
                     if let Some((_record_pos, record_nt)) = entry.record_pos_nt() {
                         if ref_nt as char == record_nt as char {
                             _result = "ref";
-                        } else if record_nt as char == query_nt{
+                        } else if record_nt as char == query_nt.unwrap(){
                             _result = "query";
                         } else {
                             _result = "other";

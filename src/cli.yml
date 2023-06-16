@@ -40,7 +40,7 @@ subcommands:
                 short: b
                 takes_value: true
                 required: true
-                help: aligned bam file with cell barcode and umi in tags
+                help: aligned, sorted bam file with cell barcode and umi in tags; see cb_tag/umi_tag
             - variants:
                 long: variants
                 short: s

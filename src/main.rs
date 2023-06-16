@@ -9,7 +9,7 @@ pub mod vcf;
 use crate::mutcaller::mutcaller_run;
 use crate::countbam::{countbam_run};
 use crate::vcf::{read_vcf_compressed, read_vcf_uncompressed, guess_vcf, guess_compression, variants_writer_fn};
-use crate::mutcaller::read_csv_str;
+use crate::mutcaller::read_csv;
 
 
 
@@ -47,7 +47,7 @@ fn main() {
                     read_vcf_uncompressed(&vcf_file.to_string(), &qual_p.unwrap(), &verbose).unwrap() 
                }
             } else {
-                read_csv_str(vcf_file, true).unwrap()
+                read_csv(None, Some(vcf_file), Some(true)).unwrap()
             }
         };
         eprintln!("Records:\n");
