@@ -73,6 +73,19 @@ impl fmt::Display for Variant {
 }
 
 
+#[derive(Deserialize)]
+#[derive(Clone)]
+#[derive(PartialEq)]
+pub enum Aligner {
+    Minimap2(String),
+    STAR(String)
+}
+
+
+
+
+
+
 #[derive(Debug)]
 pub struct Paramsm <'a> {
     pub fastq1: String,
@@ -113,7 +126,7 @@ fn load_params() -> Paramsm <'static>{
     let cb_len = cb_len.to_string().parse::<u8>().unwrap();
     let read_len = params.value_of("read_len").unwrap_or("90");
     let read_len = read_len.to_string().parse::<usize>().unwrap();
-    let aligner = params.value_of("aligner").unwrap_or("minimap2");
+    let aligner = Aligner::Minimap2(params.value_of("aligner").unwrap_or("minimap2").to_string());
     let mut aligner_loc = aligner;
     let aligner_args = ["--sr", "--splice"];
     let qual = params.value_of("qual").unwrap_or("95.0");
