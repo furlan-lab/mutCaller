@@ -12,8 +12,10 @@ extern crate itertools;
 
 
 use clap::{App, load_yaml};
-use std::str;
 use std::error::Error;
+use::std::io;
+use std::str;
+use std::io::{Error as IoError, ErrorKind};
 use serde::Deserialize;
 use std::fmt; 
 use csv::ReaderBuilder;
@@ -40,6 +42,7 @@ use simplelog::{Config, WriteLogger, CombinedLogger, LevelFilter};
 use crate::countbam::get_current_working_dir;
 use crate::countbam::cleanup;
 use crate::vcf::{guess_vcf, guess_compression, read_vcf_compressed, read_vcf_uncompressed};
+use crate::countbam::{Params};
 
 #[derive(Deserialize)]
 #[derive(Debug)]
@@ -61,14 +64,20 @@ pub enum VariantClass {
     SNV,
     MNV,
     Insertion,
-    Deletion
+    Deletion,
+    None,
 }
 
 // Implement `Display` for `Variant`.
 impl fmt::Display for Variant {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // Use `self.number` to refer to each positional data point.
-        write!(f, "seq: {} start: {} ref_nt: {} query_nt: {} name: {} class: {:?}", self.seq, self.start, self.ref_nt, self.query_nt, self.name, self.class.as_ref().unwrap())
+        let class = if self.class.as_ref().is_some(){
+            self.class.as_ref().unwrap()
+        } else {
+            &VariantClass::None
+        };
+        write!(f, "seq: {} start: {} ref_nt: {} query_nt: {} name: {} class: {:?}", self.seq, self.start, self.ref_nt, self.query_nt, self.name, class)
     }
 }
 
@@ -76,18 +85,49 @@ impl fmt::Display for Variant {
 #[derive(Deserialize)]
 #[derive(Clone)]
 #[derive(PartialEq)]
-pub enum Aligner {
-    Minimap2(String),
-    STAR(String)
+pub enum AlignerFlavor {
+    Minimap2,
+    STAR,
+}
+
+#[derive(Deserialize)]
+#[derive(Clone)]
+#[derive(PartialEq)]
+pub struct Aligner {
+    flavor: AlignerFlavor,
+    loc: String,
+    args: Vec<String>
+}
+
+impl Aligner {
+    fn new(aligner: String, aligner_loc: String, aligner_args: Vec<String>) -> Result<Aligner, io::Error>{
+        let aligner_error = IoError::new(ErrorKind::Other, "Aligner not configured");
+        let _output = Command::new(&aligner_loc)
+                    .arg("-h")
+                    .stderr(Stdio::piped())
+                    .stdout(Stdio::piped())
+                     .output()
+                     .expect("\n\n*******Failed to execute aligner*******\n\n");
+        if aligner == "minimap2" {
+            return Ok(Aligner{
+                flavor: AlignerFlavor::Minimap2,
+                loc: aligner_loc,
+                args: aligner_args
+            })
+        }
+        if aligner =="STAR" {
+            return Ok(Aligner{
+                flavor: AlignerFlavor::STAR,
+                loc: aligner_loc,
+                args: aligner_args
+            })
+        }
+        return Err(aligner_error)
+    }
 }
 
 
-
-
-
-
-#[derive(Debug)]
-pub struct Paramsm <'a> {
+pub struct Paramsm {
     pub fastq1: String,
     pub fastq2: String,
     pub genome: String,
@@ -95,9 +135,7 @@ pub struct Paramsm <'a> {
     pub umi_len: usize,
     pub cb_len: usize,
     pub threads: usize,
-    pub aligner: String,
-    pub aligner_loc: String,
-    pub aligner_args: Box<[&'a str]>,
+    pub aligner: Aligner,
     pub variants: String,
     pub read_len: usize,
     pub output_path: Box<Path>,
@@ -109,7 +147,7 @@ pub struct Paramsm <'a> {
 
 
 
-fn load_params() -> Paramsm <'static>{
+fn load_params() -> Paramsm {
     let yaml = load_yaml!("../cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
     let params = matches.subcommand_matches("UNALIGNED").unwrap();
@@ -126,21 +164,19 @@ fn load_params() -> Paramsm <'static>{
     let cb_len = cb_len.to_string().parse::<u8>().unwrap();
     let read_len = params.value_of("read_len").unwrap_or("90");
     let read_len = read_len.to_string().parse::<usize>().unwrap();
-    let aligner = Aligner::Minimap2(params.value_of("aligner").unwrap_or("minimap2").to_string());
-    let mut aligner_loc = aligner;
-    let aligner_args = ["--sr", "--splice"];
+    let aligner = params.value_of("aligner").unwrap_or("minimap2").to_string();
+    let mut aligner_loc = aligner.clone();
+    let aligner_args: Vec<String> = ["--sr", "--splice"].iter().map(|&s|s.into()).collect();
     let qual = params.value_of("qual").unwrap_or("95.0");
     let qual = qual.to_string().parse::<f64>().unwrap();
     if params.is_present("aligner_loc") {
-        aligner_loc = params.value_of("aligner_loc").unwrap();
+        aligner_loc = params.value_of("aligner_loc").unwrap().to_string();
     }
-    // if params.is_present("aligner_args") {
-    //     aligner_args = params.value_of("aligner_args").unwrap();
-    // }
+    let aligner = Aligner::new(aligner.clone(), aligner_loc.clone(), aligner_args.clone());
     let variantstring = params.value_of("variants").unwrap();
-    let mut _verbose = true;
-    if params.is_present("quiet") {
-            _verbose = false
+    let mut _verbose = false;
+    if params.is_present("verbose") {
+            _verbose = true
     };
     let mut keep = false;
     if params.is_present("keep_files") {
@@ -156,9 +192,7 @@ fn load_params() -> Paramsm <'static>{
         threads: threads as usize,
         umi_len: umi_len as usize,
         cb_len: cb_len as usize,
-        aligner: aligner.to_string(),
-        aligner_loc: aligner_loc.to_string(),
-        aligner_args:  Box::new(aligner_args),
+        aligner: aligner.unwrap(),
         variants: variantstring.to_string(),
         read_len: read_len as usize,
         keep: keep,
@@ -238,8 +272,6 @@ pub fn check_params(params: Paramsm) -> Result<Paramsm, Box<dyn Error>>{
             umi_len: params.umi_len,
             cb_len: params.cb_len,
             aligner: params.aligner,
-            aligner_loc: params.aligner_loc,
-            aligner_args: params.aligner_args,
             variants: params.variants,
             read_len: params.read_len,
             keep: params.keep,
@@ -356,7 +388,7 @@ pub fn mutcaller_run() {
     if params.verbose {
         eprintln!("\n\nChecking programs and parsing variants!\n");
     }
-    let _prog_test_res = test_progs(&params);
+    let _prog_test_res = test_progs();
     let csvdata = {
         if params.vcf {
             let is_compressed = guess_compression(&params.variants);
@@ -372,7 +404,6 @@ pub fn mutcaller_run() {
     info!("\n\n\tRunning with {} thread(s)!\n", &params.threads);
     if params.verbose {
         eprintln!("\n\nRunning with {} thread(s)!\n", &params.threads);
-        // eprintln!("Paramsm: {:?} ", &params);
     }
     let _fqr = fastq(&params);
     info!("done!");
@@ -384,13 +415,10 @@ pub fn mutcaller_run() {
             eprintln!("\nCorrectly parsed variant: {}", classified_variant.as_ref().unwrap());
         }
         info!("\n\n\tCorrectly parsed variant: {}\n", classified_variant.as_ref().unwrap());
-        let data = count_variants_helper(&params, classified_variant.unwrap());
+        let data = count_variants_helper(Some(&params), None, classified_variant.unwrap());
         if data.is_some() {
             count_vec.push(data.unwrap());
         }
-        // for svariant in variant{
-        //     count_vec.push(count_variants(&params, svariant.clone()));
-        // }
     }
     let _none = writer_fn(count_vec, &params);
     let duration = start.elapsed();
@@ -402,7 +430,7 @@ pub fn mutcaller_run() {
     }
 }
 
-fn classify_variant (variant: &Variant) -> Result<Variant, Box<dyn Error>> {
+pub fn classify_variant (variant: &Variant) -> Result<Variant, Box<dyn Error>> {
     let mut classified_variant = variant.clone();
     if classified_variant.ref_nt.len() == 1 && classified_variant.query_nt.len() == 1{
         classified_variant.class = Some(VariantClass::SNV);
@@ -427,13 +455,14 @@ fn classify_variant (variant: &Variant) -> Result<Variant, Box<dyn Error>> {
 // samtools view -b -@ 8 -o Aligned.mm2.sorted.sam Aligned.mm2.sorted.bam
 // samtools index -@ 8 Aligned.mm2.sorted.bam
 
-fn test_progs (params: &Paramsm) -> Result<(), Box<dyn Error>>{
-    let _output = Command::new(&params.aligner_loc)
-                    .arg("-h")
-                    .stderr(Stdio::piped())
-                    .stdout(Stdio::piped())
-                     .output()
-                     .expect("\n\n*******Failed to execute aligner*******\n\n");
+fn test_progs () -> Result<(), Box<dyn Error>>{
+    // let aligner = params.aligner;
+    // let _output = Command::new(aligner.aligner_loc)
+    //                 .arg("-h")
+    //                 .stderr(Stdio::piped())
+    //                 .stdout(Stdio::piped())
+    //                  .output()
+    //                  .expect("\n\n*******Failed to execute aligner*******\n\n");
     let _output = Command::new("samtools")
                     .arg("-h")
                     .stderr(Stdio::piped())
@@ -451,14 +480,14 @@ fn align (params: &Paramsm)-> Result<(), Box<dyn Error>> {
     let align_sorted_bam = &params.output_path.join("Aligned.sortedByCoord.out.bam").clone().to_owned();
     let fastq = &params.output_path.join("mutcaller_R1.fq.gz").clone().to_owned();
     let outfolder = &params.output_path.join("").clone().to_owned();
-    if params.aligner == "minimap2" {
+    if params.aligner.flavor == AlignerFlavor::Minimap2 {
         if params.verbose {
         eprintln!("{}", "Aligning reads using minimap2");
         }
         info!("{}", "Aligning reads using minimap2");
-        let output = Command::new(&params.aligner_loc)
+        let output = Command::new(&params.aligner.loc)
                         .args(["--MD", "-Y"])
-                        .args(&*params.aligner_args)
+                        .args(&*params.aligner.args)
                         .arg("-a")
                         .arg(params.genome.to_string())
                         .arg("-t")
@@ -516,12 +545,12 @@ fn align (params: &Paramsm)-> Result<(), Box<dyn Error>> {
   //   /app/software/CellRanger/6.0.1/lib/bin/STAR --genomeDir $transcriptome/star --readFilesIn ${fq3} --readNameSeparator space \
   // --runThreadN 24 --outSAMunmapped Within KeepPairs --outSAMtype BAM SortedByCoordinate
 
-    if params.aligner == "STAR" {
+    if params.aligner.flavor == AlignerFlavor::STAR {
         if params.verbose {
         eprintln!("{}", "Aligning reads using STAR");
         }
         info!("{}", "Aligning reads using STAR");
-        let output = Command::new(&params.aligner_loc)
+        let output = Command::new(&params.aligner.loc)
                         .arg("--outFileNamePrefix")
                         .arg(outfolder.to_str().unwrap())
                         .arg("--genomeDir")
@@ -677,79 +706,138 @@ fn fastq(params: &Paramsm) -> Result<(), Box<dyn Error>>{
 
 
 
-fn process_variant(ref_id: u32, start: u32)->bam::Region{
+pub fn process_variant(ref_id: u32, start: u32)->bam::Region{
     let region = bam::Region::new(ref_id,start - 1,start - 1);
     return region;
 }
 
-fn count_variants_helper(params: &Paramsm, variant: Variant)-> Option<Vec<Vec<u8>>> {
+pub fn count_variants_helper(paramsm: Option<&Paramsm>, params: Option<&Params>, variant: Variant)-> Option<Vec<Vec<u8>>> {
         if variant.class.clone().unwrap() == VariantClass::SNV {
-            return Some(count_variants_snv(params, variant))
+            if paramsm.is_some(){
+                let verbose = paramsm.unwrap().verbose;
+                let cb_len = paramsm.unwrap().cb_len;
+                let ibam_temp = paramsm.as_ref().unwrap().output_path.join("Aligned.sortedByCoord.out.bam").clone().to_owned();
+                return Some(count_variants_snv(ibam_temp.to_str().unwrap(), verbose, Some(cb_len), variant, Some("|BARCODE=".to_string()), None))
+            } else {
+                let cb_tag_b = string_pop(params.unwrap().cb_tag.as_bytes());
+                let umi_tag_b = string_pop(params.unwrap().umi_tag.as_bytes());
+                let verbose = params.unwrap().verbose;
+                return Some(count_variants_snv(&params.unwrap().bam, verbose, None, variant, None, Some((cb_tag_b, umi_tag_b))))
+            }
+        }
+        if variant.class.clone().unwrap() == VariantClass::Deletion || variant.class.clone().unwrap() == VariantClass::Insertion{
+            if paramsm.is_some(){
+                let verbose = paramsm.unwrap().verbose;
+                let cb_len = paramsm.unwrap().cb_len;
+                let ibam_temp = paramsm.as_ref().unwrap().output_path.join("Aligned.sortedByCoord.out.bam").clone().to_owned();
+                return Some(count_variants_indel(ibam_temp.to_str().unwrap(), verbose, Some(cb_len), variant, Some("|BARCODE=".to_string()), None))
+            } else {
+                let cb_tag_b = string_pop(params.unwrap().cb_tag.as_bytes());
+                let umi_tag_b = string_pop(params.unwrap().umi_tag.as_bytes());
+                let verbose = params.unwrap().verbose;
+                return Some(count_variants_indel(&params.unwrap().bam, verbose, None, variant, None, Some((cb_tag_b, umi_tag_b))))
+            }
         }
         warn!("\n\n\tVariant type {:?} not currently supported", variant.class.as_ref().unwrap());
-       if params.verbose {
+       if paramsm.unwrap().verbose {
             eprintln!("\n\n\tVariant type {:?} not currently supported", variant.class.unwrap());
         }
         return None
 }
 
+pub fn string_pop(slice: &[u8]) -> &[u8; 2] {
+    slice.try_into().expect("slice with incorrect length")
+}
+
+pub fn get_cb(split: Option<String>, cb_len: Option<usize>, readname: String, record: &bam::Record, tags: Option<(&[u8], &[u8])>)->Result<(String,String), io::Error>{
+    let barcode_error = IoError::new(ErrorKind::Other, "Cell barcode / UMI not found");
+    if split.is_some(){
+        let cbumi = match readname.split(split.as_ref().unwrap()).nth(1){
+            Some(v) => v.to_string(),
+            None => {
+                return Err(barcode_error)
+            },
+        };
+        if cbumi.len() <= cb_len.unwrap()+1 {
+            return Err(barcode_error)
+        }
+        let (cb, umi) = cbumi.split_at((cb_len.unwrap()+1).into());
+        return Ok((cb.to_string(), umi.to_string()));
+    } else {
+        let cb_tag_b = string_pop(tags.unwrap().0);
+        let umi_tag_b = string_pop(tags.unwrap().1);
+        let cb = match record.tags().get(cb_tag_b) {
+            Some( bam::record::tags::TagValue::String(cba, _)) => str::from_utf8(&cba).unwrap().to_string(),
+            _ => {
+                // eprintln!("ERROR: 'CB' not found");
+                return Err(barcode_error)
+            }
+        };
+        let umi = match record.tags().get(umi_tag_b) {
+            Some( bam::record::tags::TagValue::String(uma, _)) => str::from_utf8(&uma).unwrap().to_string(),
+            _ => {
+                // eprintln!("ERROR: 'CB' not found");
+                return Err(barcode_error)
+            }
+        };
+        return Ok((cb, umi));
+    }  
+}
+
+pub fn get_header_seqs(header: bam::Header)->Vec<String>{
+    let mut seqnames = Vec::new();
+    let hdata = header.reference_names();
+    for seq in hdata {
+        seqnames.push(seq.to_string())
+    }
+    return seqnames
+}
 
 #[allow(unused_comparisons)]
-fn count_variants_snv(params: &Paramsm, variant: Variant) -> Vec<Vec<u8>>{
-    // eprintln!("Processing using cb and umi in header");
-    let split = "|BARCODE=".to_string();
-    let ibam_temp = &params.output_path.join("Aligned.sortedByCoord.out.bam").clone().to_owned();
-    let ibam = ibam_temp.to_str().unwrap();
+pub fn count_variants_snv(ibam: &str, verbose: bool, cb_len: Option<usize>, variant: Variant, split: Option<String>, tags: Option<(&[u8], &[u8])>) -> Vec<Vec<u8>>{
+    let mut data = Vec::new();
+    //counters
     let mut total: usize = 0;
     let mut err: usize = 0;
+    //variant
     let seqname = variant.seq;
     let start = variant.start.parse::<u32>().unwrap();
     let vname = variant.name;
-    let mut reader = bam::IndexedReader::build()
-        .additional_threads(*&params.threads as u16)
-        .from_path(ibam).unwrap();
-    let mut seqnames = Vec::new();
-    let mut _result = "";
     let query_nt = variant.query_nt.chars().nth(0);
-    let header = reader.header().clone();
-    let hdata = header.reference_names();
-    for seq in hdata {
-        seqnames.push(seq)
-    }
-    let mut data = Vec::new();
-    let ref_id = seqnames.iter().position(|&r| r == &seqname).unwrap();
+    //open bam
+    let mut reader = bam::IndexedReader::build()
+        .from_path(&ibam).unwrap();
+    let seqnames = get_header_seqs(reader.header().clone());
+    let ref_id = seqnames.iter().position(|r| r.to_owned() == seqname).unwrap();
     let region = process_variant(ref_id as u32, start);
+    //process reads
     for record in reader.fetch(&&region).unwrap(){
-    // for record in reader.fetch_by(&&region, |record| record.mapq() >= 4 && (record.flag().all_bits(0 as u16) || record.flag().all_bits(16 as u16))).unwrap(){
         total+=1;
-        let readheader = match str::from_utf8(record.as_ref().unwrap().name()) {
+        let mut _result: Option<MatchType> = None;
+        let readname = match str::from_utf8(record.as_ref().unwrap().name()) {
             Ok(v) => v,
             Err(e) => panic!("\n\n*******Invalid UTF-8 sequence: {}*******\n\n", e),
         };
-        let cbumi = match readheader.split(&split).nth(1){
-            Some(v) => v.to_string(),
-            None => {
-                err+=1;
-                continue
-            },
-        };
-        if cbumi.len() <= params.cb_len+1 {
+        let Ok((cb, umi)) = get_cb(split.clone(), cb_len, readname.to_string(), record.as_ref().unwrap(), tags) else {
             err+=1;
             continue
-        }
-        let (cb, umi) = cbumi.split_at((params.cb_len+1).into());
+        };
         for entry in record.as_ref().unwrap().alignment_entries().unwrap() {
             if let Some((ref_pos, ref_nt)) = entry.ref_pos_nt() {
-                if region.start() == ref_pos {
+                if ref_pos == variant.start.parse::<u32>().unwrap() - 1 {
                     if let Some((_record_pos, record_nt)) = entry.record_pos_nt() {
-                        if ref_nt as char == record_nt as char {
-                            _result = "ref";
-                        } else if record_nt as char == query_nt.unwrap(){
-                            _result = "query";
+                        if ref_nt as char == record_nt as char && !entry.is_insertion() && !entry.is_deletion(){
+                            // eprintln!("number {}; ref_nt {}; rec_nt {}; Insertion: {}", total, ref_nt, record_nt, entry.is_insertion());
+                            _result = Some(MatchType::Ref);
+                        } else if record_nt as char == query_nt.unwrap() && !entry.is_insertion() && !entry.is_deletion() {
+                            // eprintln!("number {}; ref_nt {}; rec_nt {}; Insertion: {}", total, ref_nt, record_nt, entry.is_insertion());
+                            _result = Some(MatchType::Query);
                         } else {
-                            _result = "other";
-                        }
-                            data.push(format!("{} {} {} {} {} {}", &cb, &umi, seqname, ref_pos, vname, _result))
+                            // eprintln!("number {}; ref_nt {}; rec_nt {}; Insertion: {}", total, ref_nt, record_nt, entry.is_insertion());
+                            _result = Some(MatchType::Other);
+                        }   
+                            // eprintln!("{:?}", "pushing snv variant");
+                            data.push(format!("{} {} {} {} {} {:?}", cb, umi, seqname, start, vname, _result.unwrap()))
                         }
                     } else {
                         continue
@@ -759,7 +847,7 @@ fn count_variants_snv(params: &Paramsm, variant: Variant) -> Vec<Vec<u8>>{
             }        }
     }
     info!("\n\n\tFound {} reads spanning this variant!\n\tNumbers of errors: {}", total, err);
-    if params.verbose{
+    if verbose{
         eprintln!("Found {} reads spanning this variant!\n\tNumbers of errors: {}", total, err);
     }
     data.sort();
@@ -771,6 +859,214 @@ fn count_variants_snv(params: &Paramsm, variant: Variant) -> Vec<Vec<u8>>{
     }
     return out_vec;
 }
+
+#[derive(PartialEq)]
+#[derive(Clone)]
+pub struct SequenceMatch{
+    still_to_check: usize,
+    final_result: Option<MatchType>
+}
+
+#[derive(Debug)]
+#[derive(PartialEq)]
+#[derive(Clone)]
+pub enum MatchType {
+    Ref,
+    Query,
+    Other
+}
+
+
+#[allow(unused_comparisons)]
+pub fn count_variants_indel(ibam: &str, verbose: bool, cb_len: Option<usize>, variant: Variant, split: Option<String>, tags: Option<(&[u8], &[u8])>) -> Vec<Vec<u8>>{
+    let mut data = Vec::new();
+    //counters
+    let mut total: usize = 0;
+    let mut err: usize = 0;
+    //variant
+    let seqname = variant.seq;
+    let start = variant.start.parse::<u32>().unwrap();
+    let vname = variant.name;
+    //open bam
+    let mut reader = bam::IndexedReader::build()
+        .from_path(&ibam).unwrap();
+    let seqnames = get_header_seqs(reader.header().clone());
+    let ref_id = seqnames.iter().position(|r| r.to_owned() == seqname).unwrap();
+    let region = process_variant(ref_id as u32, start);
+    //process reads
+    for record in reader.fetch(&&region).unwrap(){
+    // for record in reader.fetch_by(&&region, |record| record.mapq() >= 4 && (record.flag().all_bits(0 as u16) || record.flag().all_bits(16 as u16))).unwrap(){
+        total+=1;
+        let mut _result: Option<MatchType> = None;
+        let readname = match str::from_utf8(record.as_ref().unwrap().name()) {
+            Ok(v) => v,
+            Err(e) => panic!("\n\n*******Invalid UTF-8 sequence: {}*******\n\n", e),
+        };
+        let Ok((cb, umi)) = get_cb(split.clone(), cb_len, readname.to_string(), record.as_ref().unwrap(), tags) else {
+            err+=1;
+            continue
+        };
+        if variant.class==Some(VariantClass::Insertion){
+            let mut ins_result = SequenceMatch{
+                // sofar: None,
+                still_to_check: variant.query_nt.len(),
+                final_result: None
+            };
+            for entry in record.as_ref().unwrap().alignment_entries().unwrap() {
+                // eprintln!("{} record no: {:?}, is insertion: {}, is_deletion: {}, is left: {}", total, entry, entry.is_insertion(), entry.is_deletion(), ins_result.still_to_check);
+                if let Some((ref_pos, ref_nt)) = entry.ref_pos_nt() {
+                    // eprintln!("number {}; ref_nt {}; Insertion: {}; Deletio: {}", total, ref_nt, entry.is_insertion());
+                    if ref_pos >= start - 1 {
+                        // eprintln!("{} record no: {:?}, is insertion: {}, is_deletion: {}, is left: {}", total, entry, entry.is_insertion(), entry.is_deletion(), ins_result.still_to_check);
+                        if let Some((_record_pos, record_nt)) = entry.record_pos_nt(){
+                            if variant.query_nt.len() == ins_result.still_to_check {
+                                // first entry of indel should always be ref; if not is other
+                                if record_nt as char != ref_nt as char {
+                                    ins_result.final_result = Some(MatchType::Other)
+                                }
+                                ins_result.still_to_check-=1;
+                            } else if record_nt as char == variant.query_nt.chars().nth(variant.query_nt.len()-ins_result.still_to_check).unwrap() as char && entry.is_insertion(){
+                                // if rec matches query at next position; subtract from the num let to check and continue
+                                ins_result.still_to_check-=1;
+                                if ins_result.still_to_check  == 0 {
+                                    ins_result.final_result = Some(MatchType::Query);
+                                }
+                            } else if record_nt as char == ref_nt as char && !entry.is_insertion(){
+                                // if rec matches ref at next posistion and isn't insertion, keep checking through length of variant
+                                ins_result.still_to_check-=1;
+                                if ins_result.still_to_check  == 0 {
+                                    ins_result.final_result = Some(MatchType::Ref);
+                                }
+                            } else if record_nt as char != ref_nt as char  && record_nt as char  != variant.query_nt.chars().nth(variant.query_nt.len()-ins_result.still_to_check).unwrap() as char{
+                                ins_result.still_to_check-=1;
+                                if ins_result.still_to_check  == 0 {
+                                    ins_result.final_result = Some(MatchType::Other);
+                                }
+                            }
+                            if ins_result.final_result.is_some(){
+                                // eprintln!("{:?}", "pushing del variant");
+                                data.push(format!("{} {} {} {} {} {:?}", &cb, &umi, seqname, start, vname, ins_result.final_result.clone().unwrap()));
+                                break
+                            } else {
+                                continue
+                            }
+                        } else {
+                            continue
+                        }
+                    }
+                } else {
+                    if let Some((_record_pos, record_nt)) = entry.record_pos_nt(){
+                        if record_nt as char == variant.query_nt.chars().nth(variant.query_nt.len()-ins_result.still_to_check).unwrap() as char && entry.is_insertion(){
+                            // if rec matches query at next position; subtract from the num let to check and continue
+                            ins_result.still_to_check-=1;
+                            if ins_result.still_to_check  == 0 {
+                                ins_result.final_result = Some(MatchType::Query);
+                            }
+                        } else if record_nt as char != variant.query_nt.chars().nth(variant.query_nt.len()-ins_result.still_to_check).unwrap() as char{
+                            ins_result.still_to_check-=1;
+                            if ins_result.still_to_check  == 0 {
+                                ins_result.final_result = Some(MatchType::Other);
+                            }
+                        }
+                        if ins_result.final_result.is_some(){
+                            // eprintln!("{:?}", "pushing del variant");
+                            data.push(format!("{} {} {} {} {} {:?}", &cb, &umi, seqname, start, vname, ins_result.final_result.clone().unwrap()));
+                            break
+                        } else {
+                            continue
+                        }
+                    } else {
+                        continue
+                    }
+                };
+            } // handle deletions     
+        } else {
+            let mut del_result = SequenceMatch{
+                // sofar: None,
+                still_to_check: variant.ref_nt.len(),
+                final_result: None
+            };
+            for entry in record.as_ref().unwrap().alignment_entries().unwrap() {
+                // eprintln!("{} record no: {:?}, is insertion: {}, is_deletion: {}, is left: {}", total, entry, entry.is_insertion(), entry.is_deletion(), del_result.still_to_check);
+                if let Some((ref_pos, ref_nt)) = entry.ref_pos_nt() {
+                    // eprintln!("number {}; ref_nt {}; Insertion: {}; Deletio: {}", total, ref_nt, entry.is_insertion());
+                    if ref_pos >= start - 1 {
+                        // eprintln!("{} record no: {:?}, is insertion: {}, is_deletion: {}, is left: {}", total, entry, entry.is_insertion(), entry.is_deletion(), del_result.still_to_check);
+                        if let Some((_record_pos, record_nt)) = entry.record_pos_nt(){
+                            if variant.ref_nt.len() == del_result.still_to_check {
+                                // first entry of indel should always be ref
+                                del_result.still_to_check-=1;
+                                if record_nt as char != ref_nt as char {
+                                    del_result.final_result = Some(MatchType::Other)
+                                }
+                            } else if record_nt as char == variant.ref_nt.chars().nth(variant.ref_nt.len()-del_result.still_to_check).unwrap() as char && entry.is_deletion(){
+                                // if rec matches query at next position; subtract from the num let to check and continue
+                                del_result.still_to_check-=1;
+                                if del_result.still_to_check  == 0 {
+                                    del_result.final_result = Some(MatchType::Query);
+                                }
+                            } else if record_nt as char == ref_nt as char && !entry.is_deletion(){
+                                // if rec matches ref at next posistion and isn't insertion, keep checking through length of variant
+                                del_result.still_to_check-=1;
+                                if del_result.still_to_check  == 0 {
+                                    del_result.final_result = Some(MatchType::Ref);
+                                }
+                            } else if record_nt as char != ref_nt as char  && record_nt as char  != variant.ref_nt.chars().nth(variant.ref_nt.len()-del_result.still_to_check).unwrap() as char{
+                                del_result.still_to_check-=1;
+                                if del_result.still_to_check  == 0 {
+                                    del_result.final_result = Some(MatchType::Other);
+                                }
+                            }
+                            if del_result.final_result.is_some(){
+                                // eprintln!("{:?}", "pushing del variant");
+                                data.push(format!("{} {} {} {} {} {:?}", &cb, &umi, seqname, start, vname, del_result.final_result.clone().unwrap()));
+                                break
+                            } else {
+                                continue
+                            }
+                        } else {
+                            if ref_nt as char == variant.ref_nt.chars().nth(variant.ref_nt.len()-del_result.still_to_check).unwrap() as char && entry.is_deletion(){
+                                // if ref matches query at next position; subtract from the num let to check and continue
+                                del_result.still_to_check-=1;
+                                if del_result.still_to_check  == 0 {
+                                    del_result.final_result = Some(MatchType::Query);
+                                }
+                            } else if ref_nt as char != variant.ref_nt.chars().nth(variant.ref_nt.len()-del_result.still_to_check).unwrap() as char{
+                                del_result.still_to_check-=1;
+                                if del_result.still_to_check  == 0 {
+                                    del_result.final_result = Some(MatchType::Other);
+                                }
+                            }
+                            if del_result.final_result.is_some(){
+                                // eprintln!("{:?}", "pushing del variant");
+                                data.push(format!("{} {} {} {} {} {:?}", &cb, &umi, seqname, start, vname, del_result.final_result.clone().unwrap()));
+                                break
+                        } else {
+                                continue
+                            }
+                        }
+                    } else {
+                        continue
+                    }
+                };
+            } // handle deletions     
+        }
+    }
+    info!("\n\n\tFound {} reads spanning this variant!\n\tNumbers of errors: {}", total, err);
+    if verbose{
+        eprintln!("Found {} reads spanning this variant!\n\tNumbers of errors: {}", total, err);
+    }
+    data.sort();
+    let mut out_vec = Vec::new();
+    let cdata = data.into_iter().dedup_with_count();
+    for (count, record) in cdata {
+       let count_str = record+&" ".to_owned()+&(count.to_string()+&"\n".to_owned());
+        out_vec.push(count_str.as_bytes().to_owned());
+    }
+    return out_vec;
+}
+
+
 
 
 // fn count_variants_mm(params: &Paramsm, variant: Variant) -> Vec<Vec<u8>>{

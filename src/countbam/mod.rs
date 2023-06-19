@@ -13,20 +13,21 @@ extern crate rayon;
 
 
 use clap::{App, load_yaml};
-use std::{env, str, fs, path::Path, path::PathBuf};
+use std::{env, fs, path::Path, path::PathBuf};
+// use std::str;
 use std::error::Error;
 use csv::ReaderBuilder;
 use std::fs::File;
 use std::io::{Write, BufReader};
-use itertools::Itertools;
+// use itertools::Itertools;
 use flate2::{GzBuilder, Compression};
-use rayon::prelude::*;
+// use rayon::prelude::*;
 use std::time::{Instant};
-use std::sync::{Arc, Mutex};
+// use std::sync::{Arc, Mutex};
 #[cfg(not(feature = "paris"))]
 use log::*;
 use simplelog::{Config, WriteLogger, CombinedLogger, LevelFilter};
-use crate::mutcaller::Variant;
+use crate::mutcaller::{Variant, count_variants_helper, classify_variant};
 use crate::vcf::{guess_vcf, guess_compression, read_vcf_compressed, read_vcf_uncompressed};
 
 #[derive(Debug)]
@@ -41,6 +42,7 @@ pub struct Params {
     pub vcf: bool,
     pub qual: f64,
 }
+
 
 pub fn load_params() -> Params {
     let yaml = load_yaml!("../cli.yml");
@@ -220,9 +222,10 @@ pub fn countbam_run() {
         let _none = writer_fn(count_vec, &params);
 
     } else {
-        rayon::ThreadPoolBuilder::new().num_threads(params.threads).build_global().unwrap();
-        let count_vec = count_helper_multiple(&params, csvdata.unwrap());
-        let _none = writer_fn(count_vec, &params);
+        eprintln!("{:?}", "not prallelized yet");
+        // rayon::ThreadPoolBuilder::new().num_threads(params.threads).build_global().unwrap();
+        // let count_vec = count_helper_multiple(&params, csvdata.unwrap());
+        // let _none = writer_fn(count_vec, &params);
     }
     
     let duration = start.elapsed();
@@ -237,17 +240,18 @@ pub fn countbam_run() {
 }
 
 
-fn count_helper_multiple (params: &Params, csvdata: Vec<Variant>) -> Vec<Vec<Vec<u8>>>{
-    let count_vecs = Arc::new(Mutex::new(Vec::new()));
-    csvdata.into_par_iter().for_each(|variant| {
-        let count_vec = count_variants_wrapper(&params, variant);
-        count_vecs.lock().unwrap().push(count_vec);
-        // eprintln!("{}", &variant);
-    });
-    let out = Arc::try_unwrap(count_vecs).unwrap();
-    let out = out.into_inner().unwrap();
-    return out
-}
+// fn count_helper_multiple (params: &Params, csvdata: Vec<Variant>) -> Vec<Vec<Vec<u8>>>{
+//     let count_vecs = Vec::new();
+//     csvdata.into_par_iter().for_each(|variant| {
+//         let classified_variant = classify_variant(&variant);
+//         let count_vec = count_variants_helper(None, Some(&params), classified_variant.unwrap());
+//         count_vecs.lock().unwrap().push(count_vec.unwrap());
+//         // eprintln!("{}", &variant);
+//     });
+//     let out = Arc::try_unwrap(count_vec).unwrap();
+//     let out = out.into_inner().unwrap();
+//     return out
+// }
 
 
 
@@ -260,7 +264,8 @@ fn count_helper_single (params: &Params, csvdata: Vec<Variant>) -> Vec<Vec<Vec<u
                 eprintln!("\nProcessing variant: {}", variant);
                 eprintln!("\nOpening bam: {}", &params.bam);
             }
-            count_vec.push(count_variants_wrapper(&params, variant));
+            let classified_variant = classify_variant(&variant);
+            count_vec.push(count_variants_helper(None, Some(&params), classified_variant.unwrap()).unwrap());
         }
     return count_vec
 }
@@ -286,102 +291,96 @@ pub fn writer_fn (count_vec: Vec<Vec<Vec<u8>>>, params: &Params) -> Result<(), B
 }
 
 
-
-fn process_variant(ref_id: u32, start: u32)->bam::Region{
-    let region = bam::Region::new(ref_id,start - 1,start - 1);
-    return region;
-}
-
-fn string_pop(slice: &[u8]) -> &[u8; 2] {
-    slice.try_into().expect("slice with incorrect length")
-}
+// fn string_pop(slice: &[u8]) -> &[u8; 2] {
+//     slice.try_into().expect("slice with incorrect length")
+// }
 
 
-fn count_variants_wrapper(params: &Params, variant: Variant) -> Vec<Vec<u8>>{
-    // let split = "|BARCODE=".to_string();
-    let ibam = &params.bam;
-    let mut total: usize = 0;
-    let mut err: usize = 0;
-    let seqname = variant.seq;
-    let start = variant.start.parse::<u32>().unwrap();
-    let vname = variant.name;
-    let query_nt = variant.query_nt.chars().nth(0).unwrap();
-    let mut reader = bam::IndexedReader::build()
-        // .additional_threads(*&params.threads as u16)
-        .from_path(ibam).unwrap();
-    let mut seqnames = Vec::new();
-    let mut _result = "";
-    let header = reader.header().clone();
-    let hdata = header.reference_names();
-    for seq in hdata {
-        seqnames.push(seq)
-    }
-    let mut _cb = "NULL".to_string();
-    let mut _umi = "NULL".to_string();
-    let mut data = Vec::new();
-    let ref_id = seqnames.iter().position(|&r| r == &seqname).unwrap();
-    let region = process_variant(ref_id as u32, start);
-    let cb_tag_b = string_pop(params.cb_tag.as_bytes());
-    let umi_tag_b = string_pop(params.umi_tag.as_bytes());
-    for record in reader.fetch(&&region).unwrap(){
-        total+=1;
-        match record.as_ref().unwrap().tags().get(cb_tag_b) {
-            Some( bam::record::tags::TagValue::String(cba, _)) => {
-                _cb = str::from_utf8(&cba).unwrap().to_string();
-            },
-            _ => {
-                // eprintln!("ERROR: 'CB' not found");
-                err+=1;
-                continue
-            }
-        }
-        match record.as_ref().unwrap().tags().get(umi_tag_b) {
-            Some( bam::record::tags::TagValue::String(uma, _)) => {
-                _umi = str::from_utf8(&uma).unwrap().to_string();
-            },
-            _ => {
-                // eprintln!("ERROR: 'CB' not found");
-                err+=1;
-                continue
-            }
-        }
-         for entry in record.as_ref().unwrap().alignment_entries().unwrap(){
-           if let Some((ref_pos, ref_nt)) = entry.ref_pos_nt() {
-                if region.start() == ref_pos {
-                    if let Some((_record_pos, record_nt)) = entry.record_pos_nt() {
-                        if ref_nt as char == record_nt as char {
-                            _result = "ref";
-                        } else if record_nt as char == query_nt{
-                            _result = "query";
-                        } else {
-                            _result = "other";
-                        }
-                            // eprintln!("pushting data");
-                            data.push(format!("{} {} {} {} {} {}", _cb, _umi, seqname, ref_pos, vname, _result))
-                        }
-                    } else {
-                        continue
-                    }
-            } else {
-                continue
-            }        
-        }
-    }
+// fn count_variants_wrapper(params: &Params, variant: Variant) -> Vec<Vec<u8>>{
+//     // let split = "|BARCODE=".to_string();
+//     let ibam = &params.bam;
+//     let mut total: usize = 0;
+//     let mut err: usize = 0;
+//     let seqname = variant.seq;
+//     let start = variant.start.parse::<u32>().unwrap();
+//     let vname = variant.name;
+//     let query_nt = variant.query_nt.chars().nth(0).unwrap();
+//     let mut reader = bam::IndexedReader::build()
+//         // .additional_threads(*&params.threads as u16)
+//         .from_path(ibam).unwrap();
+//     let mut seqnames = Vec::new();
+//     let mut _result = "";
+//     let header = reader.header().clone();
+//     let hdata = header.reference_names();
+//     for seq in hdata {
+//         seqnames.push(seq)
+//     }
+//     let mut _cb = "NULL".to_string();
+//     let mut _umi = "NULL".to_string();
+//     let mut data = Vec::new();
+//     let ref_id = seqnames.iter().position(|&r| r == &seqname).unwrap();
+//     let region = process_variant(ref_id as u32, start);
+//     let cb_tag_b = string_pop(params.cb_tag.as_bytes());
+//     let umi_tag_b = string_pop(params.umi_tag.as_bytes());
+//     for record in reader.fetch(&&region).unwrap(){
+//         total+=1;
+//         match record.as_ref().unwrap().tags().get(cb_tag_b) {
+//             Some( bam::record::tags::TagValue::String(cba, _)) => {
+//                 _cb = str::from_utf8(&cba).unwrap().to_string();
+//             },
+//             _ => {
+//                 // eprintln!("ERROR: 'CB' not found");
+//                 err+=1;
+//                 continue
+//             }
+//         }
+//         match record.as_ref().unwrap().tags().get(umi_tag_b) {
+//             Some( bam::record::tags::TagValue::String(uma, _)) => {
+//                 _umi = str::from_utf8(&uma).unwrap().to_string();
+//             },
+//             _ => {
+//                 // eprintln!("ERROR: 'CB' not found");
+//                 err+=1;
+//                 continue
+//             }
+//         }
+//          for entry in record.as_ref().unwrap().alignment_entries().unwrap(){
+//            if let Some((ref_pos, ref_nt)) = entry.ref_pos_nt() {
+//                 if region.start() == ref_pos {
+//                     if let Some((_record_pos, record_nt)) = entry.record_pos_nt() {
+//                         if ref_nt as char == record_nt as char {
+//                             _result = "ref";
+//                         } else if record_nt as char == query_nt{
+//                             _result = "query";
+//                         } else {
+//                             _result = "other";
+//                         }
+//                             // eprintln!("pushting data");
+//                             data.push(format!("{} {} {} {} {} {}", _cb, _umi, seqname, ref_pos, vname, _result))
+//                         }
+//                     } else {
+//                         continue
+//                     }
+//             } else {
+//                 continue
+//             }        
+//         }
+//     }
 
-    info!("\n\n\tFound {} reads spanning this variant!\n\tNumbers of errors: {}\n", total, err);
-    if params.verbose{
-        eprintln!("Found {} reads spanning this variant!\n\tNumbers of errors: {}\n", total, err);
-    }
+//     info!("\n\n\tFound {} reads spanning this variant!\n\tNumbers of errors: {}\n", total, err);
+//     if params.verbose{
+//         eprintln!("Found {} reads spanning this variant!\n\tNumbers of errors: {}\n", total, err);
+//     }
     
-    data.sort();
-    let mut out_vec = Vec::new();
-    let cdata = data.into_iter().dedup_with_count();
-    for (count, record) in cdata {
-       let count_str = record+&" ".to_owned()+&(count.to_string()+&"\n".to_owned());
-        out_vec.push(count_str.as_bytes().to_owned());
-    }
-    return out_vec;
-}
+//     data.sort();
+//     let mut out_vec = Vec::new();
+//     let cdata = data.into_iter().dedup_with_count();
+//     for (count, record) in cdata {
+//        let count_str = record+&" ".to_owned()+&(count.to_string()+&"\n".to_owned());
+//         out_vec.push(count_str.as_bytes().to_owned());
+//     }
+//     return out_vec;
+// }
 
 
 

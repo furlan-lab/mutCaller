@@ -18,7 +18,7 @@ loc=~/develop/mutCaller # or location where you have cloned the repository
 bc=$loc/data/737K-august-2016.txt.gz  #barcode whitelist
 fa=/Users/sfurlan/refs/genome.fa #genome location i.e. GRCh38
 #fa=/fh/fast/furlan_s/grp/refs/GRCh38/refdata-gex-GRCh38-2020-A/fasta/genome.fa
-mutcaller UNALIGNED -t 8 -g $fa -b $bc -s $loc/tests/variants.tsv -o out_mm2 \
+mutcaller UNALIGNED -v -t 8 -g $fa -b $bc -s $loc/tests/variants.tsv -o out_mm2 \
           -i $loc/tests/sequencer_R1.fastq.gz \
           -j $loc/tests/sequencer_R2.fastq.gz
 ```
@@ -31,10 +31,21 @@ loc=~/develop/mutCaller # or location where you have cloned the repository
 bc=$loc/data/737K-august-2016.txt.gz  #barcode whitelist
 fa=/fh/fast/furlan_s/grp/refs/GRCh38/refdata-gex-GRCh38-2020-A/star
 ml SAMtools/1.11-GCC-10.2.0 #make sure samtools is accessible
-mutcaller UNALIGNED \
-                        -t 8 -g $fa -b $bc -s $loc/tests/variants.tsv -a STAR -l /app/software/CellRanger/6.0.1/lib/bin/STAR \
-                        -o out_star -i $loc/tests/sequencer_R1.fastq.gz \
+mutcaller UNALIGNED -v -t 8 -g $fa -b $bc -s $loc/tests/variants.tsv -a STAR -l /app/software/CellRanger/6.0.1/lib/bin/STAR -o out_star -i $loc/tests/sequencer_R1.fastq.gz \
                         -j $loc/tests/sequencer_R2.fastq.gz
+```
+
+##### Run UNALIGNED on short read fastqs using mm2 for indels
+
+```sh
+loc=~/develop/mutCaller # or location where you have cloned the repository
+bc=$loc/data/737K-august-2016.txt.gz  #barcode whitelist
+fa=/Users/sfurlan/refs/genome.fa #genome location i.e. GRCh38
+cd $loc
+#fa=/fh/fast/furlan_s/grp/refs/GRCh38/refdata-gex-GRCh38-2020-A/fasta/genome.fa
+mutcaller UNALIGNED -v -t 1 -g $fa -b $bc -s $loc/tests/variants_indel.tsv -o out_indel \
+          -i $loc/tests/indel_R1.fastq.gz \
+          -j $loc/tests/indel_R2.fastq.gz
 ```
 
 

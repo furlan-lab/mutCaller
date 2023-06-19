@@ -10,7 +10,7 @@ documentation = "https://github.com/furlan-lab/mutCaller"
 exclude = [".gitignore"]
 
 [dependencies]
-# bam = "0.1.4"
+#bam = "0.1.4"
 bam = { git = "https://gitlab.com/scfurl/bam.git", version = "0.1.5" }
 clap = { version = "2.33.0", features = ["yaml"] }
 fastq = "0.6.0"

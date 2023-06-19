@@ -51,6 +51,7 @@ pub fn guess_compression(file: &String) -> Result<bool, VCFError>{
 }
 
 
+
 pub fn read_vcf_compressed(file: &String, qual: &f64, verbose: &bool) -> Result<Vec<Variant>, VCFError> {
     let mut reader = VCFReader::new(BufReader::new(MultiGzDecoder::new(File::open(file)?)))?;
 
@@ -75,7 +76,7 @@ pub fn read_vcf_compressed(file: &String, qual: &f64, verbose: &bool) -> Result<
         let rec = &vcf_record.reference;
         // let mut info_dat = Vec::new();
         // eprintln!("info: {:?}", info_dat);
-        if vcf_record.qual.unwrap() > *qual && alt.len()==1 && rec.len()==1 {
+        if vcf_record.qual.unwrap() > *qual {
             let mut vname = String::new();
             for (_l, v) in &vcf_record.info {
                 let first_entry = v.into_iter().nth(0).unwrap();
@@ -96,8 +97,10 @@ pub fn read_vcf_compressed(file: &String, qual: &f64, verbose: &bool) -> Result<
             data.push(Variant{
                 seq: String::from_utf8_lossy(&vcf_record.chromosome).to_string(),
                 start: vcf_record.position.to_string(),
-                ref_nt: String::from_utf8_lossy(rec).to_string().chars().nth(0).unwrap().to_string(),
-                query_nt: String::from_utf8_lossy(alt).to_string().chars().nth(0).unwrap().to_string(),
+                ref_nt: String::from_utf8_lossy(rec).to_string(),
+                query_nt: String::from_utf8_lossy(alt).to_string(),
+                // ref_nt: String::from_utf8_lossy(rec).to_string().chars().nth(0).unwrap().to_string(),
+                // query_nt: String::from_utf8_lossy(alt).to_string().chars().nth(0).unwrap().to_string(),
                 name: vname.to_string(),
                 class: None
             })
@@ -143,7 +146,7 @@ pub fn read_vcf_uncompressed(file: &String, qual: &f64, verbose: &bool) -> Resul
         let rec = &vcf_record.reference;
         // let mut info_dat = Vec::new();
         // eprintln!("info: {:?}", info_dat);
-        if vcf_record.qual.unwrap() > *qual && alt.len()==1 && rec.len()==1 {
+        if vcf_record.qual.unwrap() > *qual {
             let mut vname = String::new();
             for (_l, v) in &vcf_record.info {
                 let first_entry = v.into_iter().nth(0).unwrap();
@@ -164,8 +167,10 @@ pub fn read_vcf_uncompressed(file: &String, qual: &f64, verbose: &bool) -> Resul
             data.push(Variant{
                 seq: String::from_utf8_lossy(&vcf_record.chromosome).to_string(),
                 start: vcf_record.position.to_string(),
-                ref_nt: String::from_utf8_lossy(rec).to_string().chars().nth(0).unwrap().to_string(),
-                query_nt: String::from_utf8_lossy(alt).to_string().chars().nth(0).unwrap().to_string(),
+                ref_nt: String::from_utf8_lossy(rec).to_string(),
+                query_nt: String::from_utf8_lossy(alt).to_string(),
+                // ref_nt: String::from_utf8_lossy(rec).to_string().chars().nth(0).unwrap().to_string(),
+                // query_nt: String::from_utf8_lossy(alt).to_string().chars().nth(0).unwrap().to_string(),
                 name: vname.to_string(),
                 class: None
             })

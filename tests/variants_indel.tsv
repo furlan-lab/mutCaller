@@ -1,0 +1,4 @@
+seq	start	ref_nt	query_nt	name
+chr12	112450407	A	G	PTPN11_227A>G
+chr12	112450405	T	TGAG	PTPN11_insT>TGAG
+chr12	112450407	AGTT	A	PTPN11_delAGTT>A
