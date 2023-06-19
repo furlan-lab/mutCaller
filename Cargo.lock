@@ -224,6 +224,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fcaabb2fef8c910e7f4c7ce9f67a1283a1715879a7c230ca9d6d1ae31f16d91"
 
 [[package]]
+name = "faimm"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3ae2bfb438d20b6b0a580278fddb4ff6af8c814f16cdaf689196e9efc3fd84d"
+dependencies = [
+ "indexmap",
+ "memmap2",
+]
+
+[[package]]
 name = "fastq"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -455,6 +465,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2dffe52ecf27772e601905b7522cb4ef790d2cc203488bbd0e2fe85fcb74566d"
 
 [[package]]
+name = "memmap2"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00b6c2ebff6180198788f5db08d7ce3bc1d0b617176678831a7510825973e357"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "memoffset"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -486,6 +505,7 @@ dependencies = [
  "bytes",
  "clap",
  "csv",
+ "faimm",
  "fastq",
  "flate2",
  "itertools",

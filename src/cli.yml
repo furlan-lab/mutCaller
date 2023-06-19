@@ -1,5 +1,5 @@
 name: mutcaller
-version: "0.5.0"
+version: "0.5.1"
 author: Scott Furlan
 about: Single nucleotide variant counting pipeline for single cell genomics data
 subcommands:
@@ -104,7 +104,7 @@ subcommands:
                 short: g
                 takes_value: true
                 required: true
-                help: fasta for minimap2 or transcriptome index for kallisto
+                help: fasta for minimap2 and genome index location for STAR; for checking variants, fasta must be indexed
             - variants:
                 long: variants
                 short: s

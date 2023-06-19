@@ -43,6 +43,7 @@ use crate::countbam::get_current_working_dir;
 use crate::countbam::cleanup;
 use crate::vcf::{guess_vcf, guess_compression, read_vcf_compressed, read_vcf_uncompressed};
 use crate::countbam::{Params};
+use faimm::IndexedFasta;
 
 #[derive(Deserialize)]
 #[derive(Debug)]
@@ -401,6 +402,16 @@ pub fn mutcaller_run() {
             Ok(read_csv(Some(&params), None, None).unwrap())
         }
     };
+    let mut checked_and_classified_variants = Vec::new();
+    for variant in csvdata.as_ref().unwrap() {
+        let checked_variant = check_variants(variant, &params.genome, &params.verbose);
+        let classified_variant = classify_variant(&checked_variant);
+        if params.verbose {
+            eprintln!("Correctly parsed and classified variant: {}\n\n", classified_variant.as_ref().unwrap());
+        }
+        info!("\tCorrectly parsed and classified variant: {}\n\n", classified_variant.as_ref().unwrap());
+        checked_and_classified_variants.push(classified_variant);
+    }
     info!("\n\n\tRunning with {} thread(s)!\n", &params.threads);
     if params.verbose {
         eprintln!("\n\nRunning with {} thread(s)!\n", &params.threads);
@@ -409,13 +420,10 @@ pub fn mutcaller_run() {
     info!("done!");
     let _ar = align(&params);
     let mut count_vec = Vec::new();
-    for variant in csvdata.unwrap() {
-        let classified_variant = classify_variant(&variant);
-        if params.verbose {
-            eprintln!("\nCorrectly parsed variant: {}", classified_variant.as_ref().unwrap());
-        }
-        info!("\n\n\tCorrectly parsed variant: {}\n", classified_variant.as_ref().unwrap());
-        let data = count_variants_helper(Some(&params), None, classified_variant.unwrap());
+    for variant in checked_and_classified_variants {
+        // let checked_variant = check_variants(&variant, &params.genome, &params.verbose);
+        // let classified_variant = classify_variant(&checked_variant);
+        let data = count_variants_helper(Some(&params), None, variant.unwrap());
         if data.is_some() {
             count_vec.push(data.unwrap());
         }
@@ -429,6 +437,25 @@ pub fn mutcaller_run() {
         eprintln!("\n\nTime elapsed is: {:?}", duration);
     }
 }
+
+
+pub fn check_variants(variant: &Variant, genome: &String, verbose: &bool)-> Variant{
+    let start = &variant.start.parse::<usize>().unwrap() - 1 ;
+    // eprintln!("variant: {:?}", variant);
+    let fa = IndexedFasta::from_file(genome).expect("Error opening fa");
+    let chr_index = fa.fai().tid(&variant.seq).expect("Cannot find chr in index");
+    // eprintln!("chr_index: {:?}", chr_index);
+    let v = fa.view(chr_index, start, start+variant.ref_nt.len()).expect("Cannot get .fa view");
+    // eprintln!("v: {:?}", v.to_string());
+    assert_eq!(v.to_string(), variant.ref_nt, "Error in variants file; nt found at position: {} is {}; but nt provided was: {} ", start + 1, v.to_string(), variant.ref_nt);
+    info!("\tVariant ref_nt provided matches reference for the variant: '{}'", &variant.name);
+    if *verbose {
+        eprintln!("Variant ref_nt matches reference for the variant: '{}'", &variant.name);
+    }
+    return variant.clone()
+}
+
+
 
 pub fn classify_variant (variant: &Variant) -> Result<Variant, Box<dyn Error>> {
     let mut classified_variant = variant.clone();
@@ -846,9 +873,9 @@ pub fn count_variants_snv(ibam: &str, verbose: bool, cb_len: Option<usize>, vari
                 continue
             }        }
     }
-    info!("\n\n\tFound {} reads spanning this variant!\n\tNumbers of errors: {}", total, err);
+    info!("\n\n\tFound {} reads spanning variant: {}!\n\tNumbers of errors: {}", total, vname, err);
     if verbose{
-        eprintln!("Found {} reads spanning this variant!\n\tNumbers of errors: {}", total, err);
+        eprintln!("Found {} reads spanning variant: {}!\n\tNumbers of errors: {}", total, vname, err);
     }
     data.sort();
     let mut out_vec = Vec::new();
@@ -1052,9 +1079,9 @@ pub fn count_variants_indel(ibam: &str, verbose: bool, cb_len: Option<usize>, va
             } // handle deletions     
         }
     }
-    info!("\n\n\tFound {} reads spanning this variant!\n\tNumbers of errors: {}", total, err);
+    info!("\n\n\tFound {} reads spanning variant: {}!\n\tNumbers of errors: {}", total, vname, err);
     if verbose{
-        eprintln!("Found {} reads spanning this variant!\n\tNumbers of errors: {}", total, err);
+        eprintln!("Found {} reads spanning variant: {}!\n\tNumbers of errors: {}", total, vname, err);
     }
     data.sort();
     let mut out_vec = Vec::new();
