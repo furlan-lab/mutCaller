@@ -1,5 +1,5 @@
 name: mutcaller
-version: "0.4.1"
+version: "0.5.0"
 author: Scott Furlan
 about: Single nucleotide variant counting pipeline for single cell genomics data
 subcommands:

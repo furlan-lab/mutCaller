@@ -7,7 +7,7 @@
 
 ```sh
 loc=~/develop/mutCaller # or location where you have cloned the repository
-cd $loc  
+cd $loc
 cargo build --release && cp target/release/mutcaller ~/.local/bin
 ```
 

@@ -76,7 +76,7 @@ More examples on how to use mutcaller can be found [here](EXAMPLES.md)
 ### Help menus
 
 ```plaintext
-mutcaller 0.4.1
+mutcaller 0.5.0
 Scott Furlan
 Single nucleotide variant counting pipeline for single cell genomics data
 
