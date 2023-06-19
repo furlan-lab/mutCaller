@@ -19,7 +19,7 @@ To install mutCaller:
 5. move this binary elsewhere if desired (ideally somewhere referenced by your PATH environment variable - e.g. `~/.local/bin`)
 
 ### Updates
-
+- **version 0.5\*** - 6/19/23 - indels supported, major code cleanup
 - **version 0.4\*** - 6/14/23 - majorcode cleanup, added STAR aligner option, added vcf file support including a VARIANT subfunction that allows you to troubleshoot variants files
 - **version 0.30** - 5/9/23 - code cleanup and implemented bam option
 - **version 0.22** - 5/9/23 - first alpha release
@@ -37,15 +37,18 @@ seqname\tstart\tref_nt\tquery_nt\tname
 **More detailed explanation:**
 1. seqname - e.g. 'chr1', 'chr2', etc
 2. position - 1-indexed position (e.g, '112450407')
-3. ref_nt - nucleotide of the reference at this location
-4. query_nt - nucleotide of your query
+3. ref_nt - nucleotide(s) of the reference at this location
+4. query_nt - nucleotide(s) of your query
 5. name - a string given to the name the variant in the outpull file
+6. for all indels, the first nt provided should be contained in the reference with the following characters representing the insertion or deletion
 
 **three full lines should look something like this**
 
 ```plaintext
 seq     start  ref_nt query_nt name
 chr12   112450407   A   G   PTPN11_227A>G
+chr12   112450405   T   TGAG    PTPN11_insT>TGAG
+chr12   112450407   AGTT    A   PTPN11_delAGTT>A
 chr12   208248389   G   A   IDH1_132G>A
 chr17   7674220 C   T   TP53_248C>T
 ```
@@ -90,7 +93,7 @@ FLAGS:
 SUBCOMMANDS:
     ALIGNED      Count variants in previously aligned data
     UNALIGNED    Count variants after aligning data
-    VCF          variants file debugging
+    VARIANTS     variants file debugging
     help         Prints this message or the help of the given subcommand(s)
 
 Note: this is a work in progress. Use with caution.
@@ -111,7 +114,7 @@ FLAGS:
     -v, --verbose    use this flag to run in verbose mode
 
 OPTIONS:
-    -b, --bam <bam>              aligned bam file with cell barcode and umi in tags
+    -b, --bam <bam>              aligned, sorted bam file with cell barcode and umi in tags; see cb_tag/umi_tag
     -c, --cb_tag <cb>            bam tag containing cell barcode; default = 'CB'
     -o, --output <output>        output path (defaults to 'out'); inside folder a counts file will be called
                                  'counts.txt.gz', log will be called mutcaller.log
@@ -119,15 +122,15 @@ OPTIONS:
                                  supplied
     -t, --threads <threads>      threads
     -u, --umi_tag <umi>          bam tag containing umi; default = 'XM'
-    -s, --variants <variants>    path to variants.tsv or vcf file (SNVs only supported currently); For tsv, example
-                                 formating = seqname\tstart\tref_nt\tquery_nt\tname; e.g.
-                                 chr12,112450407,A,G,PTPN11_227A>G
+    -s, --variants <variants>    path to variants.tsv or vcf file; For tsv, example formating =
+                                 seqname\tstart\tref_nt\tquery_nt\tname; e.g. chr12,112450407,A,G,PTPN11_227A>G
 
 ```
 
 ##### UNALIGNED help
 
 ```plaintext
+
 mutcaller-UNALIGNED
 Count variants after aligning data
 
@@ -156,8 +159,8 @@ OPTIONS:
     -r, --read_len <read_len>              read 2 length (default 90)
     -t, --threads <threads>                threads
     -u, --umi_length <umi_len>             length of umi sequence
-    -s, --variants <variants>              path to variants.tsv or vcf file (SNVs only supported currently); For tsv,
-                                           example formating = seqname\tstart\tref_nt\tquery_nt\tname; e.g.
+    -s, --variants <variants>              path to variants.tsv or vcf file; For tsv, example formating =
+                                           seqname\tstart\tref_nt\tquery_nt\tname; e.g.
                                            chr12,112450407,A,G,PTPN11_227A>G
 
 ```
