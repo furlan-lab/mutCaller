@@ -404,7 +404,11 @@ pub fn mutcaller_run() {
     };
     let mut checked_and_classified_variants = Vec::new();
     for variant in csvdata.as_ref().unwrap() {
-        let checked_variant = check_variants(variant, &params.genome, &params.verbose);
+        let checked_variant = if params.aligner.flavor==AlignerFlavor::Minimap2{
+            check_variants(variant, &params.genome, &params.verbose)
+        } else {
+            variant.clone()
+        };
         let classified_variant = classify_variant(&checked_variant);
         if params.verbose {
             eprintln!("Correctly parsed and classified variant: {}\n\n", classified_variant.as_ref().unwrap());
