@@ -167,13 +167,18 @@ fn load_params() -> Paramsm {
     let read_len = read_len.to_string().parse::<usize>().unwrap();
     let aligner = params.value_of("aligner").unwrap_or("minimap2").to_string();
     let mut aligner_loc = aligner.clone();
-    let aligner_args: Vec<String> = ["--sr", "--splice"].iter().map(|&s|s.into()).collect();
+    // let add_aligner_args: Vec<String> = ["--sr", "--splice"].iter().map(|&s|s.into()).collect();
+    let add_aligner_args: Vec<String> = if params.is_present("add_aligner_args") {
+        params.value_of("add_aligner_args").unwrap().split_whitespace().map(str::to_string).collect()
+    } else {
+        [""].iter().map(|&s|s.into()).collect()
+    };
     let qual = params.value_of("qual").unwrap_or("95.0");
     let qual = qual.to_string().parse::<f64>().unwrap();
     if params.is_present("aligner_loc") {
         aligner_loc = params.value_of("aligner_loc").unwrap().to_string();
     }
-    let aligner = Aligner::new(aligner.clone(), aligner_loc.clone(), aligner_args.clone());
+    let aligner = Aligner::new(aligner.clone(), aligner_loc.clone(), add_aligner_args.clone());
     let variantstring = params.value_of("variants").unwrap();
     let mut _verbose = false;
     if params.is_present("verbose") {
@@ -602,6 +607,7 @@ fn align (params: &Paramsm)-> Result<(), Box<dyn Error>> {
                         .arg("All")
                         .arg("--readFilesCommand")
                         .arg("zcat")
+                        .args(&*params.aligner.args)
                         .stderr(Stdio::piped())
                         .stdout(Stdio::piped())
                          .output()

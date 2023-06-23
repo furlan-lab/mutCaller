@@ -3,6 +3,22 @@ version: "0.5.1"
 author: Scott Furlan
 about: Single nucleotide variant counting pipeline for single cell genomics data
 subcommands:
+    - ARGPARSE:
+        name: "ARGPARSE"
+        about: "test arg parsing"
+        args:
+            - arg1:
+                long: arg1
+                short: a
+                takes_value: true
+                required: false
+                help: obvious
+            - arg2:
+                long: arg2
+                short: b
+                takes_value: true
+                required: false
+                help: obvious
     - VARIANTS:
         name: "VARIANTS"
         about: "variants file debugging"
@@ -153,12 +169,12 @@ subcommands:
                 takes_value: true
                 required: false
                 help: path to aligner e.g. /app/software/CellRanger/6.0.1/lib/bin/STAR
-            # - aligner_args:
-            #     long: aligner_args
-            #     short: x
-            #     takes_value: true
-            #     required: false
-            #     help: additional args supplied to aligner; wrap in quotes
+            - add_aligner_args:
+                long: add_aligner_args
+                short: x
+                takes_value: true
+                required: false
+                help: additional args supplied to aligner; MUST wrap in quotes; MUST also be supplied using argument structure --aligner_args="--some_complex_arg parameter --some_other_arg other_parameter", i.e. cannot use short flag "-x" or long flag with a space e.g. "--aligner_args --some_complex_arg_parameter"
             - qual:
                 long: qual
                 short: q
