@@ -123,7 +123,7 @@ mutcaller ARGPARSE --arg1="--scoreDelOpen 0 --scoreDelBase 0 --scoreInsOpen 0 --
 
 ```
 
-##### Run UNALIGNED on short read fastqs using STAR with adjustment to aligning parameters to better capture indels
+##### Run UNALIGNED on short read fastqs using STAR with adjustment to aligning parameters to better capture indels and reads that are "too short"
 
 ```sh
 loc=~/develop/mutCaller # or location where you have cloned the repository
