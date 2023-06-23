@@ -12,13 +12,13 @@ subcommands:
                 short: a
                 takes_value: true
                 required: false
-                help: obvious
+                help: test args passed and returned
             - arg2:
                 long: arg2
                 short: b
                 takes_value: true
                 required: false
-                help: obvious
+                help: test args passed and returned
     - VARIANTS:
         name: "VARIANTS"
         about: "variants file debugging"

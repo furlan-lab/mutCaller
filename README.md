@@ -145,24 +145,34 @@ FLAGS:
     -v, --verbose       use this flag to run in verbose mode
 
 OPTIONS:
-    -a, --aligner <aligner>                aligner software - currently minimap (default) and STAR are supported; if not
-                                           available on command line supply in loc_aligner argument
-    -l, --aligner_loc <aligner_loc>        path to aligner e.g. /app/software/CellRanger/6.0.1/lib/bin/STAR
-    -b, --barcodes_file <barcodes_file>    barcodes_file
-    -c, --cb_length <cb_len>               length of umi sequence
-    -i, --fastq1 <fastq1>                  input fastq with barcodes
-    -j, --fastq2 <fastq2>                  input fastq with read
-    -g, --genome <genome>                  fasta for minimap2 or transcriptome index for kallisto
-    -o, --output <output>                  output path (defaults to 'out'); inside folder a counts file will be called
-                                           'counts.txt.gz', log will be called mutcaller.log
-    -q, --qual <qual>                      filter for variant quality (float); default = 95.0; only used if VCF file
-                                           type is supplied
-    -r, --read_len <read_len>              read 2 length (default 90)
-    -t, --threads <threads>                threads
-    -u, --umi_length <umi_len>             length of umi sequence
-    -s, --variants <variants>              path to variants.tsv or vcf file; For tsv, example formating =
-                                           seqname\tstart\tref_nt\tquery_nt\tname; e.g.
-                                           chr12,112450407,A,G,PTPN11_227A>G
+    -x, --add_aligner_args <add_aligner_args>
+            additional args supplied to aligner; MUST wrap in quotes; MUST also be supplied using the long flag with
+            double dash and equal sign e.g. --aligner_args="--some_complex_arg parameter --some_other_arg
+            other_parameter", i.e. CANNOT use short flag "-x" or long flag with a space e.g. "--aligner_args
+            --some_complex_arg_parameter"
+    -a, --aligner <aligner>
+            aligner software - currently minimap (default) and STAR are supported; if not available on command line
+            supply in loc_aligner argument
+    -l, --aligner_loc <aligner_loc>              path to aligner e.g. /app/software/CellRanger/6.0.1/lib/bin/STAR
+    -b, --barcodes_file <barcodes_file>          barcodes_file
+    -c, --cb_length <cb_len>                     length of umi sequence
+    -i, --fastq1 <fastq1>                        input fastq with barcodes
+    -j, --fastq2 <fastq2>                        input fastq with read
+    -g, --genome <genome>
+            fasta for minimap2 and genome index location for STAR; for checking variants, fasta must be indexed
+
+    -o, --output <output>
+            output path (defaults to 'out'); inside folder a counts file will be called 'counts.txt.gz', log will be
+            called mutcaller.log
+    -q, --qual <qual>
+            filter for variant quality (float); default = 95.0; only used if VCF file type is supplied
+
+    -r, --read_len <read_len>                    read 2 length (default 90)
+    -t, --threads <threads>                      threads
+    -u, --umi_length <umi_len>                   length of umi sequence
+    -s, --variants <variants>
+            path to variants.tsv or vcf file; For tsv, example formating = seqname\tstart\tref_nt\tquery_nt\tname; e.g.
+            chr12,112450407,A,G,PTPN11_227A>G
 
 ```
 
