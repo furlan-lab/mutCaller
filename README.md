@@ -79,7 +79,7 @@ More examples on how to use mutcaller can be found [here](EXAMPLES.md)
 ### Help menus
 
 ```plaintext
-mutcaller 0.5.1
+mutcaller 0.5.2
 Scott Furlan
 Single nucleotide variant counting pipeline for single cell genomics data
 
@@ -92,6 +92,7 @@ FLAGS:
 
 SUBCOMMANDS:
     ALIGNED      Count variants in previously aligned data
+    ARGPARSE     test arg parsing
     UNALIGNED    Count variants after aligning data
     VARIANTS     variants file debugging
     help         Prints this message or the help of the given subcommand(s)
