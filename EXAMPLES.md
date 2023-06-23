@@ -131,7 +131,7 @@ bc=$loc/data/737K-august-2016.txt.gz  #barcode whitelist
 fa=/fh/fast/furlan_s/grp/refs/GRCh38/refdata-gex-GRCh38-2020-A/star
 ml SAMtools/1.11-GCC-10.2.0 #make sure samtools is accessible
 mutcaller UNALIGNED -v -t 8 -g $fa -b $bc -s $loc/tests/variants.tsv -a STAR -l /app/software/CellRanger/6.0.1/lib/bin/STAR -o out_star -i $loc/tests/sequencer_R1.fastq.gz -j $loc/tests/sequencer_R2.fastq.gz \
-    --add_aligner_args
+    --add_aligner_args="--scoreDelOpen 0 --scoreDelBase 0 --scoreInsOpen 0 --scoreInsBase 0 --seedSearchStartLmax 20 --winAnchorMultimapNmax 200 --seedMultimapNmax 100000 --outFilterScoreMinOverLread 0.3 --outFilterMatchNminOverLread 0.3"
 ```
 
 

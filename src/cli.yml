@@ -174,7 +174,7 @@ subcommands:
                 short: x
                 takes_value: true
                 required: false
-                help: additional args supplied to aligner; MUST wrap in quotes; MUST also be supplied using argument structure --aligner_args="--some_complex_arg parameter --some_other_arg other_parameter", i.e. cannot use short flag "-x" or long flag with a space e.g. "--aligner_args --some_complex_arg_parameter"
+                help: additional args supplied to aligner; MUST wrap in quotes; MUST also be supplied using the long flag with double dash and equal sign e.g. --aligner_args="--some_complex_arg parameter --some_other_arg other_parameter", i.e. CANNOT use short flag "-x" or long flag with a space e.g. "--aligner_args --some_complex_arg_parameter"
             - qual:
                 long: qual
                 short: q
