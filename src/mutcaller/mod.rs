@@ -1,5 +1,16 @@
 /**
 this module handles the UNALIGNED functions in mutcaller
+
+loc=~/develop/mutCaller
+fa=/Users/sfurlan/refs/gencode.v43.transcripts.fa
+bc=$loc/data/737K-august-2016.txt.gz 
+mutcaller UNALIGNED -v -t 8 -g $fa -b $bc -s $loc/tests/variants.tsv -a bwa -o out_bwa -i $loc/tests/sequencer_R1.fastq.gz -j $loc/tests/sequencer_R2.fastq.gz
+
+
+bwa mem -t 8 /Users/sfurlan/refs/gencode.v43.transcripts.fa out_bwa/mutcaller_R1.fq.gz > out_bwa/Aligned.sam
+
+
+
 **/
 
 extern crate simplelog;
@@ -89,6 +100,7 @@ impl fmt::Display for Variant {
 pub enum AlignerFlavor {
     Minimap2,
     STAR,
+    BWA,
 }
 
 #[derive(Deserialize)]
@@ -97,14 +109,14 @@ pub enum AlignerFlavor {
 pub struct Aligner {
     flavor: AlignerFlavor,
     loc: String,
-    args: Vec<String>
+    args: Option<Vec<String>>
 }
 
 impl Aligner {
-    fn new(aligner: String, aligner_loc: String, aligner_args: Vec<String>) -> Result<Aligner, io::Error>{
+    fn new(aligner: String, aligner_loc: String, aligner_args: Option<Vec<String>>) -> Result<Aligner, io::Error>{
         let aligner_error = IoError::new(ErrorKind::Other, "Aligner not configured");
         let _output = Command::new(&aligner_loc)
-                    .arg("-h")
+                    .arg("--help")
                     .stderr(Stdio::piped())
                     .stdout(Stdio::piped())
                      .output()
@@ -112,6 +124,13 @@ impl Aligner {
         if aligner == "minimap2" {
             return Ok(Aligner{
                 flavor: AlignerFlavor::Minimap2,
+                loc: aligner_loc,
+                args: aligner_args
+            })
+        }
+        if aligner =="bwa" {
+            return Ok(Aligner{
+                flavor: AlignerFlavor::BWA,
                 loc: aligner_loc,
                 args: aligner_args
             })
@@ -168,10 +187,10 @@ fn load_params() -> Paramsm {
     let aligner = params.value_of("aligner").unwrap_or("minimap2").to_string();
     let mut aligner_loc = aligner.clone();
     // let add_aligner_args: Vec<String> = ["--sr", "--splice"].iter().map(|&s|s.into()).collect();
-    let add_aligner_args: Vec<String> = if params.is_present("add_aligner_args") {
-        params.value_of("add_aligner_args").unwrap().split_whitespace().map(str::to_string).collect()
+    let add_aligner_args: Option<Vec<String>> = if params.is_present("add_aligner_args") {
+        Some(params.value_of("add_aligner_args").unwrap().split_whitespace().map(str::to_string).collect())
     } else {
-        [""].iter().map(|&s|s.into()).collect()
+        None
     };
     let qual = params.value_of("qual").unwrap_or("95.0");
     let qual = qual.to_string().parse::<f64>().unwrap();
@@ -492,20 +511,12 @@ pub fn classify_variant (variant: &Variant) -> Result<Variant, Box<dyn Error>> {
 // samtools index -@ 8 Aligned.mm2.sorted.bam
 
 fn test_progs () -> Result<(), Box<dyn Error>>{
-    // let aligner = params.aligner;
-    // let _output = Command::new(aligner.aligner_loc)
-    //                 .arg("-h")
-    //                 .stderr(Stdio::piped())
-    //                 .stdout(Stdio::piped())
-    //                  .output()
-    //                  .expect("\n\n*******Failed to execute aligner*******\n\n");
     let _output = Command::new("samtools")
                     .arg("-h")
                     .stderr(Stdio::piped())
                     .stdout(Stdio::piped())
                      .output()
                      .expect("\n\n*******Failed to execute samtools*******\n\n");
-    // eprintln!("{}", String::from_utf8_lossy(&output.stderr));
     Ok(())
 }
 
@@ -517,25 +528,28 @@ fn align (params: &Paramsm)-> Result<(), Box<dyn Error>> {
     let fastq = &params.output_path.join("mutcaller_R1.fq.gz").clone().to_owned();
     let outfolder = &params.output_path.join("").clone().to_owned();
     if params.aligner.flavor == AlignerFlavor::Minimap2 {
+        let command = &params.aligner.loc.to_owned();
+        let args = &params.aligner.args.clone();
         if params.verbose {
         eprintln!("{}", "Aligning reads using minimap2");
         }
         info!("{}", "Aligning reads using minimap2");
-        let output = Command::new(&params.aligner.loc)
-                        .args(["--MD", "-Y"])
-                        .args(&*params.aligner.args)
-                        .arg("-a")
-                        .arg(params.genome.to_string())
-                        .arg("-t")
-                        .arg(params.threads.to_string())
-                        .arg(fastq.to_str().unwrap())
-                        .arg("-o")
-                        .arg(align_sam.to_str().unwrap())
-                        .stderr(Stdio::piped())
-                        .stdout(Stdio::piped())
-                        .output()
-                        .expect("\n\n*******Failed to execute minimap2*******\n\n");
-
+        let mut output = Command::new(&command);
+        output.args(["--MD", "-Y"]);
+        output.arg("-a");
+        output.arg(params.genome.to_string());
+        output.arg("-t");
+        output.arg(params.threads.to_string());
+        output.arg("-o");
+        output.arg(align_sam.to_str().unwrap());
+        if params.aligner.args.is_some(){
+            output.args(&*args.clone().unwrap());
+        }
+        output.arg(fastq.to_str().unwrap());
+        output.stderr(Stdio::piped());
+        output.stdout(Stdio::piped());
+        let output = output.output()
+                .expect("\n\n*******Failed to execute minimap2*******\n\n");
         if params.verbose {
             eprintln!("{}", String::from_utf8_lossy(&output.stderr));
             eprintln!("{}", "Minimap2 complete; Running samtools sort");
@@ -582,40 +596,111 @@ fn align (params: &Paramsm)-> Result<(), Box<dyn Error>> {
   // --runThreadN 24 --outSAMunmapped Within KeepPairs --outSAMtype BAM SortedByCoordinate
 
     if params.aligner.flavor == AlignerFlavor::STAR {
+        let command = &params.aligner.loc.to_owned();
+        let args = &params.aligner.args.clone();
         if params.verbose {
         eprintln!("{}", "Aligning reads using STAR");
         }
         info!("{}", "Aligning reads using STAR");
-        let output = Command::new(&params.aligner.loc)
-                        .arg("--outFileNamePrefix")
-                        .arg(outfolder.to_str().unwrap())
-                        .arg("--genomeDir")
-                        .arg(params.genome.to_string())
-                        .arg("--readFilesIn")
-                        .arg(fastq.to_str().unwrap())
-                        .arg("--readNameSeparator")
-                        .arg("space")
-                        .arg("--runThreadN")
-                        .arg(params.threads.to_string())
-                        .arg("--outSAMunmapped") 
-                        .arg("Within")
-                        .arg("KeepPairs") 
-                        .arg("--outSAMtype") 
-                        .arg("BAM")
-                        .arg("SortedByCoordinate")
-                        .arg("--outSAMattributes") 
-                        .arg("All")
-                        .arg("--readFilesCommand")
-                        .arg("zcat")
-                        .args(&*params.aligner.args)
-                        .stderr(Stdio::piped())
-                        .stdout(Stdio::piped())
-                         .output()
-                         .expect("\n\n*******Failed to execute STAR*******\n\n");
+        let mut output = Command::new(command);
+        output.arg("--outFileNamePrefix");
+        output.arg(outfolder.to_str().unwrap());
+        output.arg("--genomeDir");
+        output.arg(params.genome.to_string());
+        output.arg("--readFilesIn");
+        output.arg(fastq.to_str().unwrap());
+        output.arg("--readNameSeparator");
+        output.arg("space");
+        output.arg("--runThreadN");
+        output.arg(params.threads.to_string());
+        output.arg("--outSAMunmapped");
+        output.arg("Within");
+        output.arg("KeepPairs");
+        output.arg("--outSAMtype");
+        output.arg("BAM");
+        output.arg("SortedByCoordinate");
+        output.arg("--outSAMattributes");
+        output.arg("All");
+        output.arg("--readFilesCommand");
+        output.arg("zcat <");
+        output.stderr(Stdio::piped());
+        output.stdout(Stdio::piped());
+        if params.aligner.args.is_some(){
+            output.args(&*args.clone().unwrap());
+        }
+        let output = output.output()
+                .expect("\n\n*******Failed to execute STAR*******\n\n");
         if params.verbose {
             eprintln!("{}", String::from_utf8_lossy(&output.stderr));
             eprintln!("{}", "STAR complete; running samtools index");
         }
+    }
+    if params.aligner.flavor == AlignerFlavor::BWA {
+        let stdout = File::create(align_sam.to_str().unwrap()).expect("failed to open output file for bwa mem");
+        let command = &params.aligner.loc.to_owned();
+        let args = &params.aligner.args.clone();
+        if params.verbose {
+        eprintln!("{}", "Aligning reads using bwa mem");
+        }
+        info!("{}", "Aligning reads using bwa mem");
+        // bwa mem -o R1_mem.sam $fa mutcaller_R1.fq.gz
+        let mut output = Command::new(command);
+        output.arg("mem");
+        output.arg("-t");
+        output.arg(params.threads.to_string());
+        if params.aligner.args.is_some(){
+            output.args(&*args.clone().unwrap());
+        }
+        output.arg(params.genome.to_string());
+        output.arg(fastq.to_str().unwrap());
+        // output.arg(">");
+        // output.arg(align_sam.to_str().unwrap());
+        output.stderr(Stdio::piped());
+        output.stdout(stdout);
+        eprintln!("{:?}", output);
+        let output = output.output()
+                .expect("\n\n*******Failed to execute bwa*******\n\n");
+        if params.verbose {
+                eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+                eprintln!("{}", "bwa mem complete; Running samtools sort");
+            }
+        info!("{}", String::from_utf8_lossy(&output.stderr));
+        info!("{}", "bwa mem complete; Running samtools sort");
+        let output = Command::new("samtools")
+                    .arg("sort")
+                    .arg("-@")
+                    .arg(params.threads.to_string())
+                    .arg("-o")
+                    .arg(align_sorted_sam.to_str().unwrap())
+                    .arg(align_sam.to_str().unwrap())
+                    .stderr(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .output()
+                     .expect("\n\n*******Failed to execute samtools view*******\n\n");
+        if params.verbose {
+            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+            eprintln!("{}", "Samtools sort complete; Running samtools view");
+        }
+        info!("{}", String::from_utf8_lossy(&output.stderr));
+        info!("{}", "Samtools sort complete; Running samtools view");
+        let output = Command::new("samtools")
+                        .arg("view")
+                        .arg("-b")
+                        .arg("-@")
+                        .arg(params.threads.to_string())
+                        .arg("-o")
+                        .arg(align_sorted_bam.to_str().unwrap())
+                        .arg(align_sorted_sam.to_str().unwrap())
+                        .stderr(Stdio::piped())
+                        .stdout(Stdio::piped())
+                        .output()
+                         .expect("\n\n*******Failed to execute samtools sort*******\n\n");
+        if params.verbose {
+            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+            eprintln!("{}", "Samtools view complete; Running samtools index");
+        }
+        info!("{}", String::from_utf8_lossy(&output.stderr));
+        info!("{}", "Samtools view complete; Running samtools index");
     }
     let output = Command::new("samtools")
                     .arg("index")

@@ -162,7 +162,7 @@ subcommands:
                 short: a
                 takes_value: true
                 required: false
-                help: aligner software - currently minimap (default) and STAR are supported; if not available on command line supply in loc_aligner argument
+                help: aligner software - currently "minimap" (default), and "STAR" are supported; if not available on command line, supply in loc_aligner argument
             - aligner_loc:
                 long: aligner_loc
                 short: l
