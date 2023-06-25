@@ -527,6 +527,10 @@ fn align (params: &Paramsm)-> Result<(), Box<dyn Error>> {
     let align_sorted_bam = &params.output_path.join("Aligned.sortedByCoord.out.bam").clone().to_owned();
     let fastq = &params.output_path.join("mutcaller_R1.fq.gz").clone().to_owned();
     let outfolder = &params.output_path.join("").clone().to_owned();
+    let mut zcat_cmd = "zcat";
+    if cfg!(target_os = "macos") {
+      zcat_cmd = "zcat <";
+    }
     if params.aligner.flavor == AlignerFlavor::Minimap2 {
         let command = &params.aligner.loc.to_owned();
         let args = &params.aligner.args.clone();
@@ -622,7 +626,7 @@ fn align (params: &Paramsm)-> Result<(), Box<dyn Error>> {
         output.arg("--outSAMattributes");
         output.arg("All");
         output.arg("--readFilesCommand");
-        output.arg("zcat <");
+        output.arg(zcat_cmd);
         output.stderr(Stdio::piped());
         output.stdout(Stdio::piped());
         if params.aligner.args.is_some(){
