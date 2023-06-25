@@ -19,7 +19,7 @@ To install mutCaller:
 5. move this binary elsewhere if desired (ideally somewhere referenced by your PATH environment variable - e.g. `~/.local/bin`)
 
 ### Updates
-- **version 0.5.\*** - 6/19/23 - indels supported, major code cleanup, checks variants.tsv file to ensure ref_nt matches the reference (for UNALIGNED-minimap2 runs only)
+- **version 0.5.\*** - 6/19/23 - indels supported, major code cleanup, checks variants.tsv file to ensure ref_nt matches the reference (for UNALIGNED-minimap2 runs only); added feature for passing additional arguments to aligner
 - **version 0.4.\*** - 6/14/23 - majorcode cleanup, added STAR aligner option, added vcf file support including a VARIANT subfunction that allows you to troubleshoot variants files
 - **version 0.30** - 5/9/23 - code cleanup and implemented bam option
 - **version 0.22** - 5/9/23 - first alpha release
@@ -44,18 +44,20 @@ seqname\tstart\tref_nt\tquery_nt\tname
 
 **three full lines should look something like this**
 
+Note for duplications, it is hard to predict which the aligner will detect as an insertion.  We recommend for duplications that you include an insertion query assuming the first repeated sequence is detected as an insertion, then repeat for the second repeated sequence.  We have given an example below
+
 ```plaintext
 seq     start  ref_nt query_nt name
 chr12   112450407   A   G   PTPN11_227A>G
 chr12   112450405   T   TGAG    PTPN11_insT>TGAG
 chr12   112450407   AGTT    A   PTPN11_delAGTT>A
-chr12   208248389   G   A   IDH1_132G>A
-chr17   7674220 C   T   TP53_248C>T
+chr6    135195908   C   CGCCAGCAAGGTGCATG   MYBdup1
+chr6    135195925   A   AGCCAGCAAGGTGCATG   MYBdup2
 ```
 
 #### VCF support
 
-Mutcaller will also accept VCF.  Not all versions have been tested.  With the VARIANTS function, a user can filter records from a VCF and optionally output a variants.tsv.  It is also possible to supply a VCF to the ALIGNED and UNALIGNED functions in mutcaller directly.  See examples [here](EXAMPLES.md)
+Mutcaller will accept VCF files.  Not all versions have been tested.  With the VARIANTS function, a user can filter records from a VCF and optionally output a variants.tsv.  It is also possible to supply a VCF to the ALIGNED and UNALIGNED functions in mutcaller directly.  See examples [here](EXAMPLES.md)
 
 #### Barcodes file
 
@@ -79,7 +81,7 @@ More examples on how to use mutcaller can be found [here](EXAMPLES.md)
 ### Help menus
 
 ```plaintext
-mutcaller 0.5.2
+mutcaller 0.5.3
 Scott Furlan
 Single nucleotide variant counting pipeline for single cell genomics data
 
@@ -151,8 +153,8 @@ OPTIONS:
             other_parameter", i.e. CANNOT use short flag "-x" or long flag with a space e.g. "--aligner_args
             --some_complex_arg_parameter"
     -a, --aligner <aligner>
-            aligner software - currently minimap (default) and STAR are supported; if not available on command line
-            supply in loc_aligner argument
+            aligner software - currently "minimap" (default), and "STAR" are supported; if not available on command
+            line, supply in loc_aligner argument
     -l, --aligner_loc <aligner_loc>              path to aligner e.g. /app/software/CellRanger/6.0.1/lib/bin/STAR
     -b, --barcodes_file <barcodes_file>          barcodes_file
     -c, --cb_length <cb_len>                     length of umi sequence
