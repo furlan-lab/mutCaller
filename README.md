@@ -27,6 +27,8 @@ To install mutCaller:
 
 ### Usage
 
+Note windows not supported; tested on MacOS and Linux (Ubuntu).
+
 #### Variants file (user generated tsv)
 
 Users can generate a simple, 'variants_file' that lists the variants to be counted (tsv.file). The variants file should look like this:
