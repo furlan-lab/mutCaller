@@ -39,7 +39,7 @@ use simple_log::info;
 use std::path::Path;
 use fastq::parse_path;
 use fastq::each_zipped;
-use fastq::RefRecord;
+use fastq::{OwnedRecord};
 use crate::mutcaller::fastq::Record;
 use flate2::{read};
 use std::process::{Command, Stdio};
@@ -754,11 +754,38 @@ pub fn writer_fn (count_vec: Vec<Vec<Vec<u8>>>, params: &Paramsm) -> Result<(), 
 
 
 
-fn remove_whitespace(s: &mut String) {
-    s.retain(|c| !c.is_whitespace());
+// fn remove_whitespace(s: &mut String) {
+//     s.retain(|c| !c.is_whitespace());
+// }
+
+fn replace_slice<T>(source: &mut [T], from: &[T], to: &[T])
+where
+    T: Clone + PartialEq,
+{
+    let iteration = if source.starts_with(from) {
+        source[..from.len()].clone_from_slice(to);
+        from.len()
+    } else {
+        1
+    };
+
+    if source.len() > from.len() {
+        replace_slice(&mut source[iteration..], from, to);
+    }
 }
 
 
+fn fix_fastq_header(mut header: Vec<u8>, split: &[u8], barcode: &[u8]) -> Vec<u8>
+{   
+    replace_slice(&mut header, &[32], &[95]);
+    for value in split {
+        header.push(*value)
+    }
+    for value in barcode {
+        header.push(*value)
+    }
+    return header
+}
 
 fn fastq(params: &Paramsm) -> Result<(), Box<dyn Error>>{
     let outfastq_temp = &params.output_path.join("mutcaller_R1.fq.gz").clone().to_owned();
@@ -805,15 +832,32 @@ fn fastq(params: &Paramsm) -> Result<(), Box<dyn Error>>{
                         let (cb, _seq) = barcode.split_at(params.cb_len as usize);
                         match cbvec.binary_search(&std::str::from_utf8(cb).unwrap().to_string()) {
                             Ok(_u) => {
-                                let mut readout = RefRecord::to_owned_record(&r2);
-                                let _some_x = vec![b" "];
-                                let mut new_header = std::str::from_utf8(&readout.head()).unwrap().to_string();
-                                remove_whitespace(&mut new_header);
-                                let _ = new_header.push_str(&split);
-                                let _ = new_header.push_str(&std::str::from_utf8(&barcode).unwrap().to_string());
-                                readout.head = new_header.as_bytes().to_vec();
+                                
+                                // old method
+                                // let mut readout = RefRecord::to_owned_record(&r2);
+                                // let _some_x = vec![b" "];
+                                // let mut new_headerO = std::str::from_utf8(&r2.head()).unwrap().to_string();
+                                // remove_whitespace(&mut new_headerO);
+                                // let _ = new_headerO.push_str(&split);
+                                // let _ = new_headerO.push_str(&std::str::from_utf8(&barcode).unwrap().to_string());
+                                // eprintln!("{:?}", new_headerO);
+                                // readout.head = new_headerO.into();
+                                // let _ = readout.write(&mut writer);
+                                //
 
+                                // new method
+                                let new_header = fix_fastq_header((&r2.head()).to_vec(), &split.clone().into_bytes(), &barcode);
+                                eprintln!("{:?}", std::str::from_utf8(&new_header).unwrap());
+                                let readout = OwnedRecord{
+                                    head: new_header.to_vec(),
+                                    seq: (&r2.seq()).to_vec(),
+                                    sep: Some(vec!(43)),
+                                    qual: (&r2.qual()).to_vec()
+                                };
                                 let _ = readout.write(&mut writer);
+                                //
+
+                                
                             }
                             Err(_e) => {
                                 mmcb_count +=1;

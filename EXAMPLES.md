@@ -107,6 +107,7 @@ Found 6463 reads spanning variant: MYBindel2!
 ##### Run UNALIGNED on short read fastqs using STAR with adjustment to aligning parameters to better capture indels and reads that are "too short" and using STAR from another location
 
 ```sh
+ml SAMtools/1.11-GCC-10.2.0
 loc=~/develop/mutCaller # or location where you have cloned the repository
 bc=$loc/data/737K-august-2016.txt.gz  #barcode whitelist
 fa=/shared/biodata/ngs/Reference/10x/refdata-gex-GRCh38-2020-A/star
@@ -225,6 +226,18 @@ mutcaller ARGPARSE --arg1="--scoreDelOpen 0 --scoreDelBase 0 --scoreInsOpen 0 --
 
 ```
 
+#### Broken read
+
+```sh
+
+loc=~/develop/mutCaller # or location where you have cloned the repository
+bc=$loc/data/737K-august-2016.txt.gz  #barcode whitelist
+fa=/Users/sfurlan/refs/refdata-gex-GRCh38-2020-A/star
+cd $loc
+mutcaller UNALIGNED -v -t 8 -g $fa -b $bc -s $loc/tests/variants.tsv -a STAR -o out_star -i $loc/tests/broken_R1.fq.gz -j $loc/tests/broken_R2.fq.gz -k \
+    --add_aligner_args="--scoreDelOpen 0 --scoreDelBase 0 --scoreInsOpen 0 --scoreInsBase 0 --seedSearchStartLmax 20 --winAnchorMultimapNmax 200 --seedMultimapNmax 100000 --outFilterScoreMinOverLread 0.3 --outFilterMatchNminOverLread 0.3"
+
+```
 
 ## THANKS FOR TRYING mutCaller!!
 
