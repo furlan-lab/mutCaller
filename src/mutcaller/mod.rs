@@ -847,7 +847,7 @@ fn fastq(params: &Paramsm) -> Result<(), Box<dyn Error>>{
 
                                 // new method
                                 let new_header = fix_fastq_header((&r2.head()).to_vec(), &split.clone().into_bytes(), &barcode);
-                                eprintln!("{:?}", std::str::from_utf8(&new_header).unwrap());
+                                // eprintln!("{:?}", std::str::from_utf8(&new_header).unwrap());
                                 let readout = OwnedRecord{
                                     head: new_header.to_vec(),
                                     seq: (&r2.seq()).to_vec(),
