@@ -529,7 +529,7 @@ fn align (params: &Paramsm)-> Result<(), Box<dyn Error>> {
     let outfolder = &params.output_path.join("").clone().to_owned();
     let mut zcat_cmd = "zcat";
     if cfg!(target_os = "macos") {
-      zcat_cmd = "zcat <";
+        zcat_cmd = "zcat <";
     }
     if params.aligner.flavor == AlignerFlavor::Minimap2 {
         let command = &params.aligner.loc.to_owned();
@@ -601,12 +601,6 @@ fn align (params: &Paramsm)-> Result<(), Box<dyn Error>> {
 
     if params.aligner.flavor == AlignerFlavor::STAR {
         // set ulimit
-        let mut command = Command::new("ulimit");
-        command.args(["-n", "1000"]);
-        command.stderr(Stdio::piped());
-        command.stdout(Stdio::piped());
-        command.output()
-               .expect("\n\n*******Failed to set ulimit*******\n\n");
         let command = &params.aligner.loc.to_owned();
         let args = &params.aligner.args.clone();
         if params.verbose {

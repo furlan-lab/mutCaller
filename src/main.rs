@@ -2,6 +2,7 @@
 use clap::{App, load_yaml};
 use std::io;
 use std::io::{Error as IoError, ErrorKind};
+use rlimit::{Resource};
 
 pub mod mutcaller;
 pub mod countbam;
@@ -19,6 +20,14 @@ fn main() -> Result<(), io::Error> {
     if cfg!(windows) {
         println!("Windows not supported");
         return Err(os_error)
+    } else {
+        assert!(Resource::NOFILE.get().is_ok());
+        let no_open_before = Resource::NOFILE.get().unwrap().0;
+        if no_open_before < 1000{
+            rlimit::increase_nofile_limit(1000).unwrap();
+            eprintln!("Adjusting NOFILE limit from {} to 1000",  no_open_before);
+        }
+        // rlimit::increase_nofile_limit(10240).unwrap();
     }
     let yaml = load_yaml!("cli.yml");
     let app = App::from_yaml(yaml)
