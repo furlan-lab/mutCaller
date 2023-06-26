@@ -728,6 +728,9 @@ fn align (params: &Paramsm)-> Result<(), Box<dyn Error>> {
 
     if !params.keep && params.aligner.flavor == AlignerFlavor::STAR {
         fs::remove_file(fastq.to_str().unwrap())?;
+        if &params.output_path.join("_STARtmp").exists(){
+            fs::remove_dir_all("/some/dir")?;
+        }
     }
     Ok(())
 }
