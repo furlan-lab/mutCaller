@@ -600,6 +600,13 @@ fn align (params: &Paramsm)-> Result<(), Box<dyn Error>> {
   // --runThreadN 24 --outSAMunmapped Within KeepPairs --outSAMtype BAM SortedByCoordinate
 
     if params.aligner.flavor == AlignerFlavor::STAR {
+        // set ulimit
+        let mut command = Command::new("ulimit");
+        command.args(["-n", "1000"]);
+        command.stderr(Stdio::piped());
+        command.stdout(Stdio::piped());
+        command.output()
+               .expect("\n\n*******Failed to set ulimit*******\n\n");
         let command = &params.aligner.loc.to_owned();
         let args = &params.aligner.args.clone();
         if params.verbose {
@@ -769,6 +776,7 @@ fn fastq(params: &Paramsm) -> Result<(), Box<dyn Error>>{
     let mut total_count: usize = 0;
     let mut nfound_count: usize = 0;
     let mut mmcb_count: usize = 0;
+    let mut mm_count: usize = 0;
     let split_at = &params.umi_len + &params.cb_len;
     // let sep: Vec::<u8> = params.name_sep.as_bytes().to_vec();
 
@@ -794,7 +802,10 @@ fn fastq(params: &Paramsm) -> Result<(), Box<dyn Error>>{
                     if r1.seq().contains(&b"N"[0]) | r2.seq().contains(&b"N"[0]){
                         nfound_count += 1;
                         total_count +=1;
-                    }else{
+                    } else if r2.seq().len()!=r2.qual().len(){
+                        mm_count +=1;
+                        total_count +=1;
+                    } else{
                         total_count +=1;
                         let (barcode, _seq) = &r1.seq().split_at(split_at.into());
                         let (cb, _seq) = barcode.split_at(params.cb_len as usize);
@@ -823,9 +834,9 @@ fn fastq(params: &Paramsm) -> Result<(), Box<dyn Error>>{
         .expect("Unknown format for file 2.");
     })
     .expect("Unknown format for file 1.");
-    info!("\n\n\tTotal number of reads processed: {}, {} of these had Ns, {} of these had BC not in whitelist\n", total_count, nfound_count, mmcb_count);
+    info!("\n\n\tTotal number of reads processed: {}, {} of these had Ns, {} of these had BC not in whitelist, {} of these had mismatched length of sequence and quality\n", total_count, nfound_count, mmcb_count, mm_count);
     if params.verbose {
-        eprintln!("Total number of reads processed: {}, {} of these had Ns, {} of these had BC not in whitelist\n", total_count, nfound_count, mmcb_count);
+        eprintln!("Total number of reads processed: {}, {} of these had Ns, {} of these had BC not in whitelist, {} of these had mismatched length of sequence and quality\n", total_count, nfound_count, mmcb_count, mm_count);
     }
     Ok(())
 }

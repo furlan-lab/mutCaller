@@ -8,10 +8,12 @@
 ```sh
 loc=~/develop/mutCaller # or location where you have cloned the repository
 cd $loc
+git pull
 cargo build --release && cp $loc/target/release/mutcaller ~/.local/bin
 ```
 
 ##### Run UNALIGNED on short read fastqs using mm2
+Expected to run 1-3 minutes
 
 ```sh
 loc=~/develop/mutCaller # or location where you have cloned the repository
@@ -79,6 +81,7 @@ bc=$loc/data/737K-august-2016.txt.gz  #barcode whitelist
 fa=/Users/sfurlan/refs/refdata-gex-GRCh38-2020-A/star
 cd $loc
 #ml SAMtools/1.11-GCC-10.2.0 #make sure samtools is accessible
+#fa=/shared/biodata/ngs/Reference/10x/refdata-gex-GRCh38-2020-A/star
 mutcaller UNALIGNED -v -t 8 -g $fa -b $bc -s $loc/tests/variants.tsv -a STAR -o out_star -i $loc/tests/sequencer_R1.fastq.gz \
                         -j $loc/tests/sequencer_R2.fastq.gz
 ```
@@ -101,15 +104,17 @@ Found 6463 reads spanning variant: MYBindel2!
 
 
 
-##### Run UNALIGNED on short read fastqs using STAR with adjustment to aligning parameters to better capture indels and reads that are "too short"
+##### Run UNALIGNED on short read fastqs using STAR with adjustment to aligning parameters to better capture indels and reads that are "too short" and using STAR from another location
 
 ```sh
 loc=~/develop/mutCaller # or location where you have cloned the repository
 bc=$loc/data/737K-august-2016.txt.gz  #barcode whitelist
-fa=/Users/sfurlan/refs/refdata-gex-GRCh38-2020-A/star
+fa=/shared/biodata/ngs/Reference/10x/refdata-gex-GRCh38-2020-A/star
 cd $loc
 #ml SAMtools/1.11-GCC-10.2.0 #make sure samtools is accessible
-mutcaller UNALIGNED -v -t 8 -g $fa -b $bc -s $loc/tests/variants.tsv -a STAR -o out_star -i $loc/tests/sequencer_R1.fastq.gz -j $loc/tests/sequencer_R2.fastq.gz \
+# mutcaller UNALIGNED -v -t 8 -g $fa -b $bc -s $loc/tests/variants.tsv -a STAR -o out_star -i $loc/tests/sequencer_R1.fastq.gz -j $loc/tests/sequencer_R2.fastq.gz \
+#     --add_aligner_args="--scoreDelOpen 0 --scoreDelBase 0 --scoreInsOpen 0 --scoreInsBase 0 --seedSearchStartLmax 20 --winAnchorMultimapNmax 200 --seedMultimapNmax 100000 --outFilterScoreMinOverLread 0.3 --outFilterMatchNminOverLread 0.3"
+mutcaller UNALIGNED -v -t 8 -g $fa -b $bc -s $loc/tests/variants.tsv -a STAR -o out_star -i $loc/tests/sequencer_R1.fastq.gz -j $loc/tests/sequencer_R2.fastq.gz -l /app/software/CellRanger/7.1.0/lib/bin/STAR \
     --add_aligner_args="--scoreDelOpen 0 --scoreDelBase 0 --scoreInsOpen 0 --scoreInsBase 0 --seedSearchStartLmax 20 --winAnchorMultimapNmax 200 --seedMultimapNmax 100000 --outFilterScoreMinOverLread 0.3 --outFilterMatchNminOverLread 0.3"
 ```
 
