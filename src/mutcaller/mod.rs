@@ -720,9 +720,13 @@ fn align (params: &Paramsm)-> Result<(), Box<dyn Error>> {
         eprintln!("{}", String::from_utf8_lossy(&output.stderr));
     }
     info!("{}", String::from_utf8_lossy(&output.stderr));
-    if !params.keep {
+    if !params.keep && params.aligner.flavor == AlignerFlavor::Minimap2 {
         fs::remove_file(align_sorted_sam.to_str().unwrap())?;
         fs::remove_file(align_sam.to_str().unwrap())?;
+        fs::remove_file(fastq.to_str().unwrap())?;
+    }
+
+    if !params.keep && params.aligner.flavor == AlignerFlavor::STAR {
         fs::remove_file(fastq.to_str().unwrap())?;
     }
     Ok(())
@@ -777,7 +781,7 @@ where
 
 fn fix_fastq_header(mut header: Vec<u8>, split: &[u8], barcode: &[u8]) -> Vec<u8>
 {   
-    replace_slice(&mut header, &[32], &[95]);
+    replace_slice(&mut header, &[32], &[95]); // using an underscore to replace spaces in name of read.  this can be changed if it becomes a problem
     for value in split {
         header.push(*value)
     }
@@ -833,7 +837,7 @@ fn fastq(params: &Paramsm) -> Result<(), Box<dyn Error>>{
                         match cbvec.binary_search(&std::str::from_utf8(cb).unwrap().to_string()) {
                             Ok(_u) => {
                                 
-                                // old method
+                                // old method # this seems to cause unpredictable albeit extremely rare errors in writing fastq.  Better to create a new OwnedRecord than to make owned from RefRecord
                                 // let mut readout = RefRecord::to_owned_record(&r2);
                                 // let _some_x = vec![b" "];
                                 // let mut new_headerO = std::str::from_utf8(&r2.head()).unwrap().to_string();
@@ -851,7 +855,7 @@ fn fastq(params: &Paramsm) -> Result<(), Box<dyn Error>>{
                                 let readout = OwnedRecord{
                                     head: new_header.to_vec(),
                                     seq: (&r2.seq()).to_vec(),
-                                    sep: Some(vec!(43)),
+                                    sep: Some(vec!(43)),  
                                     qual: (&r2.qual()).to_vec()
                                 };
                                 let _ = readout.write(&mut writer);
