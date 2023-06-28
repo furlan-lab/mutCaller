@@ -197,7 +197,7 @@ mutcaller VARIANTS -s $loc/tests/var.vcf.gz -q 98 -m variants_from_vcf.tsv -v
 ##### Run ALIGNED on a bam file using VCF file filtered on 98
 ```sh
 loc=~/develop/mutCaller
-mutcaller ALIGNED -b $loc/tests/lr.bam -s $loc/tests/var.vcf.gz -q 98 -t 1 -o out_long
+mutcaller ALIGNED -b $loc/tests/lr.bam -s $loc/tests/var.vcf.gz -q 98 -t 8 -o out_long
 ```
 
 
@@ -214,7 +214,6 @@ mutcaller UNALIGNED -v -t 1 -g $fa -b $bc -s $loc/tests/variants_indel.tsv -o ou
           -j $loc/tests/indel_R2.fastq.gz
 ```
 
-
 ##### Test argument parsing
 
 ```sh
@@ -226,18 +225,6 @@ mutcaller ARGPARSE --arg1="--scoreDelOpen 0 --scoreDelBase 0 --scoreInsOpen 0 --
 
 ```
 
-#### Broken read
-
-```sh
-
-loc=~/develop/mutCaller # or location where you have cloned the repository
-bc=$loc/data/737K-august-2016.txt.gz  #barcode whitelist
-fa=/Users/sfurlan/refs/refdata-gex-GRCh38-2020-A/star
-cd $loc
-mutcaller UNALIGNED -v -t 8 -g $fa -b $bc -s $loc/tests/variants.tsv -a STAR -o out_star -i $loc/tests/broken_R1.fq.gz -j $loc/tests/broken_R2.fq.gz -k \
-    --add_aligner_args="--scoreDelOpen 0 --scoreDelBase 0 --scoreInsOpen 0 --scoreInsBase 0 --seedSearchStartLmax 20 --winAnchorMultimapNmax 200 --seedMultimapNmax 100000 --outFilterScoreMinOverLread 0.3 --outFilterMatchNminOverLread 0.3"
-
-```
 
 ## THANKS FOR TRYING mutCaller!!
 
