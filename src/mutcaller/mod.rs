@@ -1044,6 +1044,9 @@ pub fn count_variants_snv(ibam: &str, verbose: bool, cb_len: Option<usize>, vari
                         } else if record_nt as char == query_nt.unwrap() && !entry.is_insertion() && !entry.is_deletion() {
                             // eprintln!("number {}; ref_nt {}; rec_nt {}; Insertion: {}", total, ref_nt, record_nt, entry.is_insertion());
                             _result = Some(MatchType::Query);
+                        } else if record_nt == b'N'{
+                            err+=1;
+                            continue
                         } else {
                             // eprintln!("number {}; ref_nt {}; rec_nt {}; Insertion: {}", total, ref_nt, record_nt, entry.is_insertion());
                             _result = Some(MatchType::Other);
