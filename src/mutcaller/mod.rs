@@ -11,6 +11,18 @@ bwa mem -t 8 /Users/sfurlan/refs/gencode.v43.transcripts.fa out_bwa/mutcaller_R1
 
 
 
+#long read JMML woes # make a breaksit file
+folder=/fh/scratch/delete90/furlan_s/targ_reseq/230710_longread_JMMLpulldown/1_A01/bc1001--bc1001/1_A01
+cd $folder
+bam=/fh/scratch/delete90/furlan_s/targ_reseq/230710_longread_JMMLpulldown/1_A01/bc1001--bc1001/1_A01/bc1001--bc1001.mdmapped.bam
+variants=/fh/scratch/delete90/furlan_s/targ_reseq/230710_longread_JMMLpulldown/variants.tsv
+mutcaller ALIGNED --bam ${bam} -s ${variants} -o mutcaller
+samtools view -hb $bam chr1:114705630-114705640 > breaksit_jmml.bam
+
+
+#copy locally and check after making variants_jmml.tsv
+mutcaller ALIGNED --bam ~/develop/mutCaller/tests/breaksit_jmml.bam -s ~/develop/mutCaller/tests/variants_jmml.tsv -o jmml
+
 **/
 
 extern crate simplelog;
