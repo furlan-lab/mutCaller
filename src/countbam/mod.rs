@@ -191,11 +191,14 @@ pub fn countbam_run() {
             Ok(read_csv(&params).unwrap())
         }
     };
+    let mut classified_variants = Vec::new();
     for variant in csvdata.as_ref().unwrap() {
+        let classified_variant = classify_variant(&variant);
         if params.verbose {
-            eprintln!("\nCorrectly parsed variant: {}", variant);
+            eprintln!("Correctly parsed and classified variant: {}\n\n", classified_variant.as_ref().unwrap());
         }
-        info!("\n\n\tCorrectly parsed variant: {}\n", variant);
+        info!("\tCorrectly parsed and classified variant: {}\n\n", classified_variant.as_ref().unwrap());
+        classified_variants.push(classified_variant.unwrap());
     }
 
     info!("\n\n\tRunning with {} thread(s)!\n", &params.threads);
@@ -204,11 +207,11 @@ pub fn countbam_run() {
     }
 
     if params.threads==1 {
-        let count_vec = count_helper(&params, csvdata.unwrap());
+        let count_vec = count_helper(&params, classified_variants);
         let _none = writer_fn(count_vec, &params);
     } else {
         let mut count_vec = Vec::new();
-        let variants = csvdata.unwrap();
+        let variants = classified_variants;
         let chunk_iter = variants.par_chunks(params.threads)
                                 .map(|vec_variants_chunk| count_helper(&params, vec_variants_chunk.to_vec()));
         chunk_iter.collect_into_vec(&mut count_vec);
@@ -230,13 +233,13 @@ pub fn countbam_run() {
 fn count_helper (params: &Params, csvdata: Vec<Variant>) -> Vec<Vec<Vec<u8>>>{
     let mut count_vec = Vec::new();
     for variant in csvdata {
+            let classified_variant = classify_variant(&variant);
             info!("\n\n\tProcessing variant: {}\n", variant);
             info!("\n\n\tOpening bam: {}\n", &params.bam);
             if params.verbose{
                 eprintln!("\nProcessing variant: {}", variant);
                 eprintln!("\nOpening bam: {}", &params.bam);
             }
-            let classified_variant = classify_variant(&variant);
             count_vec.push(count_variants_helper(None, Some(&params), classified_variant.unwrap()).unwrap());
         }
     return count_vec

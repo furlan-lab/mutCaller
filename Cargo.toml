@@ -1,6 +1,6 @@
 [package]
 name = "mutcaller_rust"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 description = "Single nucleotide variant counting pipeline for single cell genomics data"
 repository = "https://github.com/furlan-lab/mutCaller"
@@ -11,7 +11,7 @@ exclude = [".gitignore"]
 
 [dependencies]
 #bam = "0.1.4"
-bam = { git = "https://gitlab.com/scfurl/bam.git", version = "0.1.5" }
+bam = { git = "https://gitlab.com/scfurl/bam.git", version = "0.1.6" }
 clap = { version = "2.33.0", features = ["yaml"] }
 faimm = "0.3.0"
 fastq = "0.6.0"

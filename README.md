@@ -19,6 +19,7 @@ To install mutCaller:
 5. move this binary elsewhere if desired (ideally somewhere referenced by your PATH environment variable - e.g. `~/.local/bin`)
 
 ### Updates
+- **version 0.7.0 7/24/23 - fixed a bug that caused panic in some reads that the bam library (https://gitlab.com/scfurl/bam) deemed as containing conflicts between MD tag and CIGAR string.  These panics have been adressed in v 0.1.6 of the bam library and are now a required version for mutCaller
 - **version 0.6.\*** - 6/27/23 - working parallel countbam (chunking large variants into num of cores)
 - **version 0.5.\*** - 6/19/23 - indels supported, major code cleanup, checks variants.tsv file to ensure ref_nt matches the reference (for UNALIGNED-minimap2 runs only); added feature for passing additional arguments to aligner; fixed a bug that alllwed reads with different seq and qual lengths to tank STAR.
 - **version 0.4.\*** - 6/14/23 - majorcode cleanup, added STAR aligner option, added vcf file support including a VARIANT subfunction that allows you to troubleshoot variants files
