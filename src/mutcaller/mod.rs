@@ -23,6 +23,23 @@ samtools view -hb $bam chr1:114705630-114705640 > breaksit_jmml.bam
 #copy locally and check after making variants_jmml.tsv
 mutcaller ALIGNED --bam ~/develop/mutCaller/tests/breaksit_jmml.bam -s ~/develop/mutCaller/tests/variants_jmml.tsv -o jmml
 
+
+#try convering to fastq and copying tags if there is a problem with MD tagmaking using calmd
+samtools view bc1001--bc1001.corrected.sorted.bam | head
+genome=/shared/biodata/ngs/Reference/10x/refdata-gex-GRCh38-2020-A/fasta/genome.fa
+samtools fastq -T RG,XC,XM,ac,bc,bq,bx,cx,ec,ls,ma,np,rq,sn,we,ws,zm,qs,qe,XA,rc,gp,nb,CB,CR bc1001--bc1001.corrected.sorted.bam | minimap2 --MD -Y -a $genome -t 10 -o bc1001--bc1001.mapped_mm.sam -
+samtools fastq -T RG,XC,XM,ac,bc,bq,bx,cx,ec,ls,ma,np,rq,sn,we,ws,zm,qs,qe,XA,rc,gp,nb,CB,CR breaksit_jmml.bam | minimap2 --MD -Y -a $genome -t 10 -o breaksit_jmml_mapped_mm.sam -
+samtools sort breaksit_jmml.sam -O BAM -o breaksit_jmml_sorted.bam
+samtools index breaksit_jmml_sorted.bam
+rm breaksit_jmml.sam
+variants=/fh/scratch/delete90/furlan_s/targ_reseq/230710_longread_JMMLpulldown/variants.tsv
+mutcaller ALIGNED --bam breaksit_jmml_sorted.bam -s ${variants} -o mutcaller
+## no difference!
+
+
+
+
+
 **/
 
 extern crate simplelog;
