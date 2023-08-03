@@ -25,18 +25,33 @@ mutcaller UNALIGNED -v -t 8 -g $fa -b $bc -s $loc/tests/variants.tsv -o out_mm2 
           -j $loc/tests/sequencer_R2.fastq.gz
 ```
 
-You should get 
+At the end you should get 
 ```txt
 Found 516843 reads spanning variant: PTPN11_227A>G!
     Numbers of errors: 0
+        Query: 345529
+        Reference: 169819
+        Other: 1479
 Found 1827 reads spanning variant: IDH1_132G>A!
     Numbers of errors: 0
+        Query: 0
+        Reference: 1827
+        Other: 0
 Found 24646 reads spanning variant: TP53_248C>T!
     Numbers of errors: 0
+        Query: 13
+        Reference: 23993
+        Other: 640
 Found 4248 reads spanning variant: MYBindel1!
     Numbers of errors: 0
+        Query: 2
+        Reference: 4204
+        Other: 39
 Found 6257 reads spanning variant: MYBindel2!
     Numbers of errors: 0
+        Query: 125
+        Reference: 4262
+        Other: 1869
 ```
 
 ##### Run UNALIGNED on short read fastqs using mm2 using additional args
@@ -52,19 +67,34 @@ mutcaller UNALIGNED -v -t 8 -g $fa -b $bc -s $loc/tests/variants.tsv -o out_mm2 
           --add_aligner_args="-ax sr"
 ```
 
-You should get 
+At the end you should get 
 ```txt
 
 Found 517851 reads spanning variant: PTPN11_227A>G!
     Numbers of errors: 0
-Found 143670 reads spanning variant: IDH1_132G>A!
+        Query: 347058
+        Reference: 169420
+        Other: 1359
+Found 143673 reads spanning variant: IDH1_132G>A!
     Numbers of errors: 0
+        Query: 0
+        Reference: 143672
+        Other: 1
 Found 28621 reads spanning variant: TP53_248C>T!
     Numbers of errors: 0
+        Query: 18
+        Reference: 27836
+        Other: 767
 Found 4253 reads spanning variant: MYBindel1!
     Numbers of errors: 0
+        Query: 10
+        Reference: 4204
+        Other: 36
 Found 6407 reads spanning variant: MYBindel2!
     Numbers of errors: 0
+        Query: 127
+        Reference: 4259
+        Other: 2020
 
 ```
 
@@ -86,18 +116,35 @@ mutcaller UNALIGNED -v -t 8 -g $fa -b $bc -s $loc/tests/variants.tsv -a STAR -o 
                         -j $loc/tests/sequencer_R2.fastq.gz
 ```
 
+At the end you should get 
 ```txt
+
 
 Found 522539 reads spanning variant: PTPN11_227A>G!
     Numbers of errors: 0
+        Query: 350499
+        Reference: 170341
+        Other: 1569
 Found 340092 reads spanning variant: IDH1_132G>A!
     Numbers of errors: 0
+        Query: 77
+        Reference: 338620
+        Other: 1271
 Found 29836 reads spanning variant: TP53_248C>T!
     Numbers of errors: 0
+        Query: 25
+        Reference: 28754
+        Other: 1054
 Found 4310 reads spanning variant: MYBindel1!
     Numbers of errors: 0
+        Query: 0
+        Reference: 4248
+        Other: 59
 Found 6463 reads spanning variant: MYBindel2!
     Numbers of errors: 0
+        Query: 115
+        Reference: 4309
+        Other: 2038
 
 ```
 
@@ -119,6 +166,7 @@ mutcaller UNALIGNED -v -t 8 -g $fa -b $bc -s $loc/tests/variants.tsv -a STAR -o 
     --add_aligner_args="--scoreDelOpen 0 --scoreDelBase 0 --scoreInsOpen 0 --scoreInsBase 0 --seedSearchStartLmax 20 --winAnchorMultimapNmax 200 --seedMultimapNmax 100000 --outFilterScoreMinOverLread 0.3 --outFilterMatchNminOverLread 0.3"
 ```
 
+At the end you should get 
 ```txt
 
 Found 523152 reads spanning variant: PTPN11_227A>G!

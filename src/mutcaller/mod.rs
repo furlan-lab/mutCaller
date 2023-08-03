@@ -1007,15 +1007,20 @@ pub fn get_header_seqs(header: bam::Header)->Vec<String>{
 
 #[allow(unused_comparisons)]
 pub fn count_variants_snv(ibam: &str, verbose: bool, cb_len: Option<usize>, variant: Variant, split: Option<String>, tags: Option<(&[u8], &[u8])>) -> Vec<Vec<u8>>{
+    let debug = false;
     let mut data = Vec::new();
     //counters
     let mut total: usize = 0;
     let mut err: usize = 0;
+    let mut query: usize = 0;
+    let mut reference: usize = 0;
+    let mut other: usize = 0;
     //variant
     let seqname = variant.seq;
     let start = variant.start.parse::<u32>().unwrap();
     let vname = variant.name;
     let query_nt = variant.query_nt.chars().nth(0);
+    let us_ref_nt = variant.ref_nt.chars().nth(0);
     //open bam
     let mut reader = bam::IndexedReader::build()
         .from_path(&ibam).unwrap();
@@ -1038,18 +1043,30 @@ pub fn count_variants_snv(ibam: &str, verbose: bool, cb_len: Option<usize>, vari
             if let Some((ref_pos, ref_nt)) = entry.ref_pos_nt() {
                 if ref_pos == variant.start.parse::<u32>().unwrap() - 1 {
                     if let Some((_record_pos, record_nt)) = entry.record_pos_nt() {
-                        if ref_nt as char == record_nt as char && !entry.is_insertion() && !entry.is_deletion(){
+                        if record_nt as char == us_ref_nt.unwrap() && !entry.is_insertion() && !entry.is_deletion(){
+                            if debug{
+                                eprintln!("reference nt = {}\n record_nt = {}\n ergo: reference", ref_nt as char, record_nt as char);
+                            }
                             // eprintln!("number {}; ref_nt {}; rec_nt {}; Insertion: {}", total, ref_nt, record_nt, entry.is_insertion());
                             _result = Some(MatchType::Ref);
+                            reference+=1;
                         } else if record_nt as char == query_nt.unwrap() && !entry.is_insertion() && !entry.is_deletion() {
                             // eprintln!("number {}; ref_nt {}; rec_nt {}; Insertion: {}", total, ref_nt, record_nt, entry.is_insertion());
                             _result = Some(MatchType::Query);
+                            if debug{
+                                eprintln!("reference nt = {}\n record_nt = {}\n ergo: query", ref_nt as char, record_nt as char);
+                            }
+                            query+=1;
                         } else if record_nt == b'N'{
                             err+=1;
                             continue
                         } else {
                             // eprintln!("number {}; ref_nt {}; rec_nt {}; Insertion: {}", total, ref_nt, record_nt, entry.is_insertion());
                             _result = Some(MatchType::Other);
+                            if debug{
+                                eprintln!("reference nt = {}\n record_nt = {}\n ergo: other", ref_nt as char, record_nt as char);
+                            }
+                            other+=1;
                         }   
                             // eprintln!("{:?}", "pushing snv variant");
                             data.push(format!("{} {} {} {} {} {:?}", cb, umi, seqname, start, vname, _result.unwrap()))
@@ -1064,6 +1081,10 @@ pub fn count_variants_snv(ibam: &str, verbose: bool, cb_len: Option<usize>, vari
     info!("\n\n\tFound {} reads spanning variant: {}!\n\tNumbers of errors: {}", total, vname, err);
     if verbose{
         eprintln!("Found {} reads spanning variant: {}!\n\tNumbers of errors: {}", total, vname, err);
+    }
+    info!("\t\t\tQuery: {}\n\t\t\tReference: {}\n\t\t\tOther: {}", query, reference, other);
+    if verbose{
+        eprintln!("\t\tQuery: {}\n\t\tReference: {}\n\t\tOther: {}", query, reference, other);
     }
     data.sort();
     let mut out_vec = Vec::new();
@@ -1098,6 +1119,9 @@ pub fn count_variants_indel(ibam: &str, verbose: bool, cb_len: Option<usize>, va
     //counters
     let mut total: usize = 0;
     let mut err: usize = 0;
+    let mut query: usize = 0;
+    let mut reference: usize = 0;
+    let mut other: usize = 0;
     //variant
     let seqname = variant.seq;
     let start = variant.start.parse::<u32>().unwrap();
@@ -1137,7 +1161,8 @@ pub fn count_variants_indel(ibam: &str, verbose: bool, cb_len: Option<usize>, va
                             if variant.query_nt.len() == ins_result.still_to_check {
                                 // first entry of indel should always be ref; if not is other
                                 if record_nt as char != ref_nt as char {
-                                    ins_result.final_result = Some(MatchType::Other)
+                                    ins_result.final_result = Some(MatchType::Other);
+                                    other+=1;
                                 }
                                 ins_result.still_to_check-=1;
                             } else if record_nt as char == variant.query_nt.chars().nth(variant.query_nt.len()-ins_result.still_to_check).unwrap() as char && entry.is_insertion(){
@@ -1145,17 +1170,20 @@ pub fn count_variants_indel(ibam: &str, verbose: bool, cb_len: Option<usize>, va
                                 ins_result.still_to_check-=1;
                                 if ins_result.still_to_check  == 0 {
                                     ins_result.final_result = Some(MatchType::Query);
+                                    query+=1;
                                 }
                             } else if record_nt as char == ref_nt as char && !entry.is_insertion(){
                                 // if rec matches ref at next posistion and isn't insertion, keep checking through length of variant
                                 ins_result.still_to_check-=1;
                                 if ins_result.still_to_check  == 0 {
                                     ins_result.final_result = Some(MatchType::Ref);
+                                    reference+=1;
                                 }
                             } else if record_nt as char != ref_nt as char  && record_nt as char  != variant.query_nt.chars().nth(variant.query_nt.len()-ins_result.still_to_check).unwrap() as char{
                                 ins_result.still_to_check-=1;
                                 if ins_result.still_to_check  == 0 {
                                     ins_result.final_result = Some(MatchType::Other);
+                                    other+=1;
                                 }
                             }
                             if ins_result.final_result.is_some(){
@@ -1176,11 +1204,13 @@ pub fn count_variants_indel(ibam: &str, verbose: bool, cb_len: Option<usize>, va
                             ins_result.still_to_check-=1;
                             if ins_result.still_to_check  == 0 {
                                 ins_result.final_result = Some(MatchType::Query);
+                                query+=1;
                             }
                         } else if record_nt as char != variant.query_nt.chars().nth(variant.query_nt.len()-ins_result.still_to_check).unwrap() as char{
                             ins_result.still_to_check-=1;
                             if ins_result.still_to_check  == 0 {
                                 ins_result.final_result = Some(MatchType::Other);
+                                other+=1;
                             }
                         }
                         if ins_result.final_result.is_some(){
@@ -1212,24 +1242,28 @@ pub fn count_variants_indel(ibam: &str, verbose: bool, cb_len: Option<usize>, va
                                 // first entry of indel should always be ref
                                 del_result.still_to_check-=1;
                                 if record_nt as char != ref_nt as char {
-                                    del_result.final_result = Some(MatchType::Other)
+                                    del_result.final_result = Some(MatchType::Other);
+                                    other+=1;
                                 }
                             } else if record_nt as char == variant.ref_nt.chars().nth(variant.ref_nt.len()-del_result.still_to_check).unwrap() as char && entry.is_deletion(){
                                 // if rec matches query at next position; subtract from the num let to check and continue
                                 del_result.still_to_check-=1;
                                 if del_result.still_to_check  == 0 {
                                     del_result.final_result = Some(MatchType::Query);
+                                    query+=1;
                                 }
                             } else if record_nt as char == ref_nt as char && !entry.is_deletion(){
                                 // if rec matches ref at next posistion and isn't insertion, keep checking through length of variant
                                 del_result.still_to_check-=1;
                                 if del_result.still_to_check  == 0 {
                                     del_result.final_result = Some(MatchType::Ref);
+                                    reference+=1;
                                 }
                             } else if record_nt as char != ref_nt as char  && record_nt as char  != variant.ref_nt.chars().nth(variant.ref_nt.len()-del_result.still_to_check).unwrap() as char{
                                 del_result.still_to_check-=1;
                                 if del_result.still_to_check  == 0 {
                                     del_result.final_result = Some(MatchType::Other);
+                                    other+=1;
                                 }
                             }
                             if del_result.final_result.is_some(){
@@ -1270,6 +1304,10 @@ pub fn count_variants_indel(ibam: &str, verbose: bool, cb_len: Option<usize>, va
     info!("\n\n\tFound {} reads spanning variant: {}!\n\tNumbers of errors: {}", total, vname, err);
     if verbose{
         eprintln!("Found {} reads spanning variant: {}!\n\tNumbers of errors: {}", total, vname, err);
+    }
+    info!("\t\t\tQuery: {}\n\t\t\tReference: {}\n\t\t\tOther: {}", query, reference, other);
+    if verbose{
+        eprintln!("\t\tQuery: {}\n\t\tReference: {}\n\t\tOther: {}", query, reference, other);
     }
     data.sort();
     let mut out_vec = Vec::new();
