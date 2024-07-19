@@ -2,16 +2,18 @@
 use clap::{App, load_yaml};
 use std::io;
 use std::io::{Error as IoError, ErrorKind};
-use rlimit::{Resource};
+use rlimit::Resource;
 
 pub mod mutcaller;
 pub mod countbam;
 pub mod vcf;
+pub mod align;
+pub mod utils;
 
 use crate::mutcaller::mutcaller_run;
-use crate::countbam::{countbam_run};
+use crate::countbam::countbam_run;
 use crate::vcf::{read_vcf_compressed, read_vcf_uncompressed, guess_vcf, guess_compression, variants_writer_fn};
-use crate::mutcaller::read_csv;
+use crate::utils::read_csv;
 use clap::{ArgMatches, AppSettings};
 // use itertools::Itertools;
 

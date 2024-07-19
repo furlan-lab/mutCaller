@@ -19,11 +19,11 @@ use csv::ReaderBuilder;
 use std::fs::File;
 use std::io::{Write, BufReader};
 use flate2::{GzBuilder, Compression};
-use std::time::{Instant};
-#[cfg(not(feature = "paris"))]
+use std::time::Instant;
 use log::*;
 use simplelog::{Config, WriteLogger, CombinedLogger, LevelFilter};
-use crate::mutcaller::{Variant, count_variants_helper, classify_variant};
+use crate::mutcaller::{Variant, count_variants_helper};
+use crate::utils::classify_variant;
 use crate::vcf::{guess_vcf, guess_compression, read_vcf_compressed, read_vcf_uncompressed};
 use rayon::prelude::*;
 

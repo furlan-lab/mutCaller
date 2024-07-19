@@ -1,47 +1,3 @@
-/**
-this module handles the UNALIGNED functions in mutcaller
-
-loc=~/develop/mutCaller
-fa=/Users/sfurlan/refs/gencode.v43.transcripts.fa
-bc=$loc/data/737K-august-2016.txt.gz 
-mutcaller UNALIGNED -v -t 8 -g $fa -b $bc -s $loc/tests/variants.tsv -a bwa -o out_bwa -i $loc/tests/sequencer_R1.fastq.gz -j $loc/tests/sequencer_R2.fastq.gz
-
-
-bwa mem -t 8 /Users/sfurlan/refs/gencode.v43.transcripts.fa out_bwa/mutcaller_R1.fq.gz > out_bwa/Aligned.sam
-
-
-
-#long read JMML woes # make a breaksit file
-folder=/fh/scratch/delete90/furlan_s/targ_reseq/230710_longread_JMMLpulldown/1_A01/bc1001--bc1001/1_A01
-cd $folder
-bam=/fh/scratch/delete90/furlan_s/targ_reseq/230710_longread_JMMLpulldown/1_A01/bc1001--bc1001/1_A01/bc1001--bc1001.mdmapped.bam
-variants=/fh/scratch/delete90/furlan_s/targ_reseq/230710_longread_JMMLpulldown/variants.tsv
-mutcaller ALIGNED --bam ${bam} -s ${variants} -o mutcaller
-samtools view -hb $bam chr1:114705630-114705640 > breaksit_jmml.bam
-
-
-#copy locally and check after making variants_jmml.tsv
-mutcaller ALIGNED --bam ~/develop/mutCaller/tests/breaksit_jmml.bam -s ~/develop/mutCaller/tests/variants_jmml.tsv -o jmml
-
-
-#try convering to fastq and copying tags if there is a problem with MD tagmaking using calmd
-samtools view bc1001--bc1001.corrected.sorted.bam | head
-genome=/shared/biodata/ngs/Reference/10x/refdata-gex-GRCh38-2020-A/fasta/genome.fa
-samtools fastq -T RG,XC,XM,ac,bc,bq,bx,cx,ec,ls,ma,np,rq,sn,we,ws,zm,qs,qe,XA,rc,gp,nb,CB,CR bc1001--bc1001.corrected.sorted.bam | minimap2 --MD -Y -a $genome -t 10 -o bc1001--bc1001.mapped_mm.sam -
-samtools fastq -T RG,XC,XM,ac,bc,bq,bx,cx,ec,ls,ma,np,rq,sn,we,ws,zm,qs,qe,XA,rc,gp,nb,CB,CR breaksit_jmml.bam | minimap2 --MD -Y -a $genome -t 10 -o breaksit_jmml_mapped_mm.sam -
-samtools sort breaksit_jmml.sam -O BAM -o breaksit_jmml_sorted.bam
-samtools index breaksit_jmml_sorted.bam
-rm breaksit_jmml.sam
-variants=/fh/scratch/delete90/furlan_s/targ_reseq/230710_longread_JMMLpulldown/variants.tsv
-mutcaller ALIGNED --bam breaksit_jmml_sorted.bam -s ${variants} -o mutcaller
-## no difference!
-
-
-
-
-
-**/
-
 extern crate simplelog;
 extern crate csv;
 extern crate clap;
@@ -50,44 +6,26 @@ extern crate serde;
 extern crate fastq;
 extern crate itertools;
 
-
 use clap::{App, load_yaml};
-use std::error::Error;
-use::std::io;
-use std::str;
-use std::io::{Error as IoError, ErrorKind};
-use serde::Deserialize;
-use std::fmt; 
-use csv::ReaderBuilder;
-use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
+use flate2::{Compression, GzBuilder};
+use fastq::{parse_path, each_zipped, OwnedRecord};
 use itertools::Itertools;
-use flate2::GzBuilder;
-use flate2::Compression;
-use simple_log::info;
-use std::path::Path;
-use fastq::parse_path;
-use fastq::each_zipped;
-use fastq::{OwnedRecord};
+use serde::Deserialize;
+use simplelog::{Config, WriteLogger, CombinedLogger, LevelFilter, info, warn};
+use std::error::Error;
+use std::fmt;
+use std::fs::{self, File};
+use std::io::{Error as IoError, ErrorKind};
+use std::path::{Path, PathBuf};
+use std::str;
+use std::time::Instant;
+use crate::align::{align, Aligner, AlignerFlavor, test_progs};
+use crate::countbam::{Params, get_current_working_dir};
 use crate::mutcaller::fastq::Record;
-use flate2::{read};
-use std::process::{Command, Stdio};
-use std::ffi::OsStr;
-use std::fs;
-use flate2::read::MultiGzDecoder;
-use std::time::{Instant};
-#[cfg(not(feature = "paris"))]
-use log::*;
-use simplelog::{Config, WriteLogger, CombinedLogger, LevelFilter};
-use crate::countbam::get_current_working_dir;
-use crate::countbam::cleanup;
+use crate::utils::{read_csv, lines_from_file, check_variants, classify_variant, writer_fn};
 use crate::vcf::{guess_vcf, guess_compression, read_vcf_compressed, read_vcf_uncompressed};
-use crate::countbam::{Params};
-use faimm::IndexedFasta;
 
-#[derive(Deserialize)]
-#[derive(Debug)]
-#[derive(Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Variant {
     pub seq: String,
     pub start: String,
@@ -97,10 +35,7 @@ pub struct Variant {
     pub class: Option<VariantClass>,
 }
 
-#[derive(Deserialize)]
-#[derive(Debug)]
-#[derive(Clone)]
-#[derive(PartialEq)]
+#[derive(Deserialize, Debug, Clone, PartialEq)]
 pub enum VariantClass {
     SNV,
     MNV,
@@ -109,72 +44,12 @@ pub enum VariantClass {
     None,
 }
 
-// Implement `Display` for `Variant`.
 impl fmt::Display for Variant {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // Use `self.number` to refer to each positional data point.
-        let class = if self.class.as_ref().is_some(){
-            self.class.as_ref().unwrap()
-        } else {
-            &VariantClass::None
-        };
+        let class = self.class.as_ref().unwrap_or(&VariantClass::None);
         write!(f, "seq: {} start: {} ref_nt: {} query_nt: {} name: {} class: {:?}", self.seq, self.start, self.ref_nt, self.query_nt, self.name, class)
     }
 }
-
-
-#[derive(Deserialize)]
-#[derive(Clone)]
-#[derive(PartialEq)]
-pub enum AlignerFlavor {
-    Minimap2,
-    STAR,
-    BWA,
-}
-
-#[derive(Deserialize)]
-#[derive(Clone)]
-#[derive(PartialEq)]
-pub struct Aligner {
-    flavor: AlignerFlavor,
-    loc: String,
-    args: Option<Vec<String>>
-}
-
-impl Aligner {
-    fn new(aligner: String, aligner_loc: String, aligner_args: Option<Vec<String>>) -> Result<Aligner, io::Error>{
-        let aligner_error = IoError::new(ErrorKind::Other, "Aligner not configured");
-        let _output = Command::new(&aligner_loc)
-                    .arg("--help")
-                    .stderr(Stdio::piped())
-                    .stdout(Stdio::piped())
-                     .output()
-                     .expect("\n\n*******Failed to execute aligner*******\n\n");
-        if aligner == "minimap2" {
-            return Ok(Aligner{
-                flavor: AlignerFlavor::Minimap2,
-                loc: aligner_loc,
-                args: aligner_args
-            })
-        }
-        if aligner =="bwa" {
-            return Ok(Aligner{
-                flavor: AlignerFlavor::BWA,
-                loc: aligner_loc,
-                args: aligner_args
-            })
-        }
-        if aligner =="STAR" {
-            return Ok(Aligner{
-                flavor: AlignerFlavor::STAR,
-                loc: aligner_loc,
-                args: aligner_args
-            })
-        }
-        return Err(aligner_error)
-    }
-}
-
 
 pub struct Paramsm {
     pub fastq1: String,
@@ -187,252 +62,99 @@ pub struct Paramsm {
     pub aligner: Aligner,
     pub variants: String,
     pub read_len: usize,
-    pub output_path: Box<Path>,
+    pub output_path: PathBuf,
     pub keep: bool,
     pub verbose: bool,
     pub vcf: bool,
     pub qual: f64,
 }
 
-
-
 fn load_params() -> Paramsm {
     let yaml = load_yaml!("../cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
     let params = matches.subcommand_matches("UNALIGNED").unwrap();
-    let fastq1 = params.value_of("fastq1").unwrap();
-    let fastq2 = params.value_of("fastq2").unwrap();
+
+    let fastq1 = params.value_of("fastq1").unwrap().to_string();
+    let fastq2 = params.value_of("fastq2").unwrap().to_string();
     let output = params.value_of("output").unwrap_or("out");
-    let genome = params.value_of("genome").unwrap();
-    let bcs = params.value_of("barcodes_file").unwrap_or("/Users/sfurlan/develop/mutCaller/data/737K-august-2016.txt.gz");
-    let threads = params.value_of("threads").unwrap_or("1");
-    let threads = threads.to_string().parse::<usize>().unwrap();
-    let umi_len = params.value_of("umi_len").unwrap_or("10");
-    let umi_len = umi_len.to_string().parse::<u8>().unwrap();
-    let cb_len = params.value_of("cb_len").unwrap_or("16");
-    let cb_len = cb_len.to_string().parse::<u8>().unwrap();
-    let read_len = params.value_of("read_len").unwrap_or("90");
-    let read_len = read_len.to_string().parse::<usize>().unwrap();
+    let genome = params.value_of("genome").unwrap().to_string();
+    let bcs = params.value_of("barcodes_file").unwrap_or("/Users/sfurlan/develop/mutCaller/data/737K-august-2016.txt.gz").to_string();
+    let threads = params.value_of("threads").unwrap_or("1").parse().unwrap();
+    let umi_len = params.value_of("umi_len").unwrap_or("10").parse().unwrap();
+    let cb_len = params.value_of("cb_len").unwrap_or("16").parse().unwrap();
+    let read_len = params.value_of("read_len").unwrap_or("90").parse().unwrap();
     let aligner = params.value_of("aligner").unwrap_or("minimap2").to_string();
-    let mut aligner_loc = aligner.clone();
-    // let add_aligner_args: Vec<String> = ["--sr", "--splice"].iter().map(|&s|s.into()).collect();
-    let add_aligner_args: Option<Vec<String>> = if params.is_present("add_aligner_args") {
-        Some(params.value_of("add_aligner_args").unwrap().split_whitespace().map(str::to_string).collect())
-    } else {
-        None
-    };
-    let qual = params.value_of("qual").unwrap_or("95.0");
-    let qual = qual.to_string().parse::<f64>().unwrap();
-    if params.is_present("aligner_loc") {
-        aligner_loc = params.value_of("aligner_loc").unwrap().to_string();
-    }
-    let aligner = Aligner::new(aligner.clone(), aligner_loc.clone(), add_aligner_args.clone());
-    let variantstring = params.value_of("variants").unwrap();
-    let mut _verbose = false;
-    if params.is_present("verbose") {
-            _verbose = true
-    };
-    let mut keep = false;
-    if params.is_present("keep_files") {
-            keep = true
-    };
-    let outpath = Path::new(&output);
-    let params = Paramsm{
-        fastq1: fastq1.to_string(),
-        fastq2: fastq2.to_string(),
-        genome: genome.to_string(),
-        output_path: outpath.into(), 
-        bcs: bcs.to_string(),
-        threads: threads as usize,
-        umi_len: umi_len as usize,
-        cb_len: cb_len as usize,
-        aligner: aligner.unwrap(),
-        variants: variantstring.to_string(),
-        read_len: read_len as usize,
-        keep: keep,
-        verbose: _verbose,
+    let aligner_loc = params.value_of("aligner_loc").unwrap_or(&aligner).to_string();
+    let add_aligner_args = params.value_of("add_aligner_args").map(|s| s.split_whitespace().map(str::to_string).collect());
+    let qual = params.value_of("qual").unwrap_or("95.0").parse().unwrap();
+    let verbose = params.is_present("verbose");
+    let keep = params.is_present("keep_files");
+
+    let aligner = Aligner::new(aligner, aligner_loc, add_aligner_args).unwrap();
+    let variants = params.value_of("variants").unwrap().to_string();
+
+    let params = Paramsm {
+        fastq1,
+        fastq2,
+        genome,
+        bcs,
+        umi_len,
+        cb_len,
+        threads,
+        aligner,
+        variants,
+        read_len,
+        output_path: PathBuf::from(output),
+        keep,
+        verbose,
         vcf: false,
-        qual: qual
+        qual,
     };
     return check_params(params).unwrap()
 }
 
-
-
-pub fn check_params(params: Paramsm) -> Result<Paramsm, Box<dyn Error>>{
-    let _cu = cleanup(&params.output_path.join("mutcaller.log"), false);
-    let log_file_path = &params.output_path.join("mutcaller.log");
+fn check_params(params: Paramsm) -> Result<Paramsm, Box<dyn Error>> {
+    let log_file_path = params.output_path.join("mutcaller.log");
     let log_file = log_file_path.to_str().unwrap();
-    info!("\n\n\tStarting!\n");
-    let wdpb= get_current_working_dir().unwrap();
-    let wdir = wdpb.to_str().unwrap();
-    info!("\n\n\tCurrent working directory: '{}'\n", wdir);
+
+    CombinedLogger::init(vec![
+        WriteLogger::new(LevelFilter::Info, Config::default(), File::create(log_file)?),
+    ])?;
+
+    let wdir = get_current_working_dir()?.to_str().unwrap().to_string();
     if params.verbose {
         eprintln!("\n\nCurrent working directory: '{}'", wdir);
     }
-    if params.output_path.is_relative(){
-        let a1 = Path::new(wdir).join(&params.output_path);
-        let abs_outpath = a1.to_str().unwrap();
-        if params.output_path.exists() {
-                info!("\n\n\tFound existing output directory: '{}'\n", &abs_outpath);
-                warn!("\n\n\t{}", "Existing data in this folder could be lost!!!\n");
-               if params.verbose {
-                    eprintln!("Found existing output directory: '{}'", &abs_outpath);
-                    eprintln!("\t{}", "Existing data in this folder could be lost!!!");
-                }
-        } else {
-            info!("\n\n\tCreating output directory: '{}'\n", &abs_outpath);
-            if params.verbose {
-                eprintln!("Creating output directory: '{}'", &abs_outpath);
-            }
-            fs::create_dir(&params.output_path)?;
+    let abs_outpath = if params.output_path.is_relative() {
+        Path::new(&wdir).join(&params.output_path)
+    } else {
+        params.output_path.clone()
+    };
+    let abs_outpath_str = abs_outpath.to_str().unwrap();
+    if abs_outpath.exists() {
+        info!("\n\n\tFound existing output directory: '{}'\n", abs_outpath_str);
+        warn!("\n\n\tExisting data in this folder could be lost!!!\n");
+        if params.verbose {
+            eprintln!("Found existing output directory: '{}'", abs_outpath_str);
+            eprintln!("\tExisting data in this folder could be lost!!!");
         }
     } else {
-        let abs_outpath = &params.output_path.to_str().unwrap();
-        if params.output_path.exists() {
-            info!("\n\n\tFound existing output directory: '{}'\n", &abs_outpath);
-            warn!("\n\n\t{}", "Existing data in this folder could be lost!!!\n");
-            if params.verbose {
-                eprintln!("Found existing output directory: '{}'", &abs_outpath);
-                eprintln!("\t{}", "Existing data in this folder could be lost!!!");
-            }
-        } else {
-            info!("\n\n\tCreating output directory: '{}'\n", &abs_outpath);
-            if params.verbose {
-                eprintln!("Creating output directory: '{}'", &abs_outpath);
-            }
-            fs::create_dir(&params.output_path)?;
+        info!("\n\n\tCreating output directory: '{}'\n", abs_outpath_str);
+        if params.verbose {
+            eprintln!("Creating output directory: '{}'", abs_outpath_str);
         }
+        fs::create_dir(&abs_outpath)?;
     }
-    CombinedLogger::init(vec![
-        #[cfg(not(feature = "termcolor"))]
-        WriteLogger::new(
-            LevelFilter::Info,
-            Config::default(),
-            File::create(log_file).unwrap(),
-        ),
-    ])
-    .unwrap();
 
-    // check if variants file is vcf
-    let is_vcf = guess_vcf(&params.variants);
-    Ok(Paramsm{
-            fastq1: params.fastq1,
-            fastq2: params.fastq2,
-            genome: params.genome,
-            output_path: params.output_path, 
-            bcs: params.bcs,
-            threads: params.threads,
-            umi_len: params.umi_len,
-            cb_len: params.cb_len,
-            aligner: params.aligner,
-            variants: params.variants,
-            read_len: params.read_len,
-            keep: params.keep,
-            verbose: params.verbose,
-            vcf: is_vcf.unwrap(),
-            qual: params.qual
+    let is_vcf = guess_vcf(&params.variants)?;
+    Ok(Paramsm {
+        vcf: is_vcf,
+        ..params
     })
 }
 
-
-pub fn read_csv(params: Option<&Paramsm>, file_i: Option<String>, verbose_i: Option<bool>) -> Result<Vec<Variant>, Box<dyn Error>> {
-    // Build the CSV reader and iterate over each record.
-//     let data = "\
-// seq\tstart\tref_nt\tquery_nt\tname
-// chr12\t112450407\tA\tG\tPTPN11_227A>G
-// chr2\t208248389\tG\tA\tIDH1_132G>A
-// chr17\t7674220\tC\tT\tTP53_248C>T";
-    let file = {
-        if params.is_some(){
-            &params.unwrap().variants
-        } else {
-            file_i.as_ref().unwrap()
-        }
-    };
-
-    let verbose = {
-        if params.is_some(){
-            &params.unwrap().verbose
-        } else {
-            verbose_i.as_ref().unwrap()
-        }
-    };
-
-    #[derive(Deserialize)]
-    struct PreVariant {
-        seq: String,
-        start: String,
-        ref_nt: String,
-        query_nt: String,
-        name: String
-    }
-    let path = Path::new(&file);
-    let compression = {
-        if path.extension().is_some() && path.extension().unwrap() == "gz" {
-                true
-            }else{
-                false
-        }
-    };
-    if compression {
-        if *verbose {
-            eprintln!("Opening variants file: {}\n", file.to_string());
-        }
-        info!("Opening variants file: {}\n", file.to_string());
-        // let file = File::open(file.to_string()).unwrap();
-        let reader = BufReader::new(MultiGzDecoder::new(File::open(file.to_string()).unwrap()));
-        let mut rdr = ReaderBuilder::new()
-            .has_headers(true)
-            .delimiter(b'\t')
-            .from_reader(reader);
-        let mut csvdata = Vec::new();
-        for result in rdr.deserialize() {
-            let prevariant: PreVariant = result?;
-            csvdata.push(Variant{
-                seq: prevariant.seq,
-                start: prevariant.start,
-                ref_nt: prevariant.ref_nt,
-                query_nt: prevariant.query_nt,
-                name: prevariant.name,
-                class: None,
-            });
-        }
-        Ok(csvdata)
-    } else {
-        if *verbose {
-            eprintln!("Opening variants file: {}\n", file.to_string());
-        }
-        info!("Opening variants file: {}\n", file.to_string());
-        let file = File::open(file.to_string()).unwrap();
-        let reader = BufReader::new(file);
-        let mut rdr = ReaderBuilder::new()
-            .has_headers(true)
-            .delimiter(b'\t')
-            .from_reader(reader);
-        let mut csvdata = Vec::new();
-        for result in rdr.deserialize() {
-            let prevariant: PreVariant = result?;
-            csvdata.push(Variant{
-                seq: prevariant.seq,
-                start: prevariant.start,
-                ref_nt: prevariant.ref_nt,
-                query_nt: prevariant.query_nt,
-                name: prevariant.name,
-                class: None,
-            });
-        }
-        Ok(csvdata)
-    }
-
-}
-
-
-
-
 pub fn mutcaller_run() {
     let start = Instant::now();
-
     let params = load_params();
     info!("\n\n\tParsing Parameters!\n");
     if params.verbose {
@@ -442,473 +164,125 @@ pub fn mutcaller_run() {
     if params.verbose {
         eprintln!("\n\nChecking programs and parsing variants!\n");
     }
+
     let _prog_test_res = test_progs();
-    let csvdata = {
-        if params.vcf {
-            let is_compressed = guess_compression(&params.variants);
-            if is_compressed.unwrap() {
-                read_vcf_compressed(&params.variants, &params.qual, &params.verbose)
-            } else {
-                read_vcf_uncompressed(&params.variants, &params.qual, &params.verbose)
-            }
+    let csvdata = if params.vcf {
+        let is_compressed = guess_compression(&params.variants).unwrap();
+        if is_compressed {
+            read_vcf_compressed(&params.variants, &params.qual, &params.verbose)
         } else {
-            Ok(read_csv(Some(&params), None, None).unwrap())
+            read_vcf_uncompressed(&params.variants, &params.qual, &params.verbose)
         }
+    } else {
+        Ok(read_csv(Some(&params), None, None).unwrap())
     };
-    let mut checked_and_classified_variants = Vec::new();
-    for variant in csvdata.as_ref().unwrap() {
-        let checked_variant = if params.aligner.flavor==AlignerFlavor::Minimap2{
-            check_variants(variant, &params.genome, &params.verbose)
-        } else {
-            variant.clone()
-        };
-        let classified_variant = classify_variant(&checked_variant);
-        if params.verbose {
-            eprintln!("Correctly parsed and classified variant: {}\n\n", classified_variant.as_ref().unwrap());
-        }
-        info!("\tCorrectly parsed and classified variant: {}\n\n", classified_variant.as_ref().unwrap());
-        checked_and_classified_variants.push(classified_variant);
-    }
-    info!("\n\n\tRunning with {} thread(s)!\n", &params.threads);
+
+    let checked_and_classified_variants: Vec<_> = csvdata.as_ref().unwrap().iter()
+        .map(|variant| {
+            let checked_variant = if params.aligner.flavor == AlignerFlavor::Minimap2 {
+                check_variants(variant, &params.genome, &params.verbose)
+            } else {
+                variant.clone()
+            };
+            let classified_variant = classify_variant(&checked_variant).unwrap();
+            if params.verbose {
+                eprintln!("Correctly parsed and classified variant: {}\n\n", classified_variant);
+            }
+            info!("\tCorrectly parsed and classified variant: {}\n\n", classified_variant);
+            classified_variant
+        })
+        .collect();
+
+    info!("\n\n\tRunning with {} thread(s)!\n", params.threads);
     if params.verbose {
-        eprintln!("\n\nRunning with {} thread(s)!\n", &params.threads);
+        eprintln!("\n\nRunning with {} thread(s)!\n", params.threads);
     }
     let _fqr = fastq(&params);
     info!("done!");
     let _ar = align(&params);
-    let mut count_vec = Vec::new();
-    for variant in checked_and_classified_variants {
-        // let checked_variant = check_variants(&variant, &params.genome, &params.verbose);
-        // let classified_variant = classify_variant(&checked_variant);
-        let data = count_variants_helper(Some(&params), None, variant.unwrap());
-        if data.is_some() {
-            count_vec.push(data.unwrap());
-        }
-    }
+
+    let count_vec: Vec<_> = checked_and_classified_variants.into_iter()
+        .filter_map(|variant| Some(count_variants_helper(Some(&params), None, variant.clone()).unwrap_or_else(|| fallback_count_variants(&variant))))
+        .collect();
+
     let _none = writer_fn(count_vec, &params);
     let duration = start.elapsed();
     info!("\n\n\tDone!!\n");
     info!("\n\n\tTime elapsed is: {:?}\n", duration);
-    if params.verbose{
+    if params.verbose {
         eprintln!("\n\nDone!!");
         eprintln!("\n\nTime elapsed is: {:?}", duration);
     }
 }
 
 
-pub fn check_variants(variant: &Variant, genome: &String, verbose: &bool)-> Variant{
-    let start = &variant.start.parse::<usize>().unwrap() - 1 ;
-    // eprintln!("variant: {:?}", variant);
-    let fa = IndexedFasta::from_file(genome).expect("Error opening fa");
-    let chr_index = fa.fai().tid(&variant.seq).expect("Cannot find chr in index");
-    // eprintln!("chr_index: {:?}", chr_index);
-    let v = fa.view(chr_index, start, start+variant.ref_nt.len()).expect("Cannot get .fa view");
-    // eprintln!("v: {:?}", v.to_string());
-    assert_eq!(v.to_string(), variant.ref_nt, "Error in variants file; nt found at position: {} is {}; but nt provided was: {} ", start + 1, v.to_string(), variant.ref_nt);
-    info!("\tVariant ref_nt provided matches reference for the variant: '{}'", &variant.name);
-    if *verbose {
-        eprintln!("Variant ref_nt matches reference for the variant: '{}'", &variant.name);
-    }
-    return variant.clone()
-}
-
-
-
-pub fn classify_variant (variant: &Variant) -> Result<Variant, Box<dyn Error>> {
-    let mut classified_variant = variant.clone();
-    if classified_variant.ref_nt.len() == 1 && classified_variant.query_nt.len() == 1{
-        classified_variant.class = Some(VariantClass::SNV);
-        return Ok(classified_variant)
-    }
-    if classified_variant.ref_nt.len() > 1 && classified_variant.query_nt.len() > 1{
-        classified_variant.class = Some(VariantClass::MNV);
-        return Ok(classified_variant)
-    }
-    if classified_variant.ref_nt.len() == 1 && classified_variant.query_nt.len() >= 1{
-        classified_variant.class = Some(VariantClass::Insertion);
-        return Ok(classified_variant)
-    }
-    classified_variant.class = Some(VariantClass::Deletion);
-    return Ok(classified_variant)
-    // return Err(e)
-    // return Ok(classified_variant)
-}
-
-// minimap2 --MD -a $fa -t 8 mutcaller_R1.fq.gz -o Aligned.mm2.sam
-// samtools sort -@ 8 -o Aligned.mm2.sorted.sam Aligned.mm2.sam
-// samtools view -b -@ 8 -o Aligned.mm2.sorted.sam Aligned.mm2.sorted.bam
-// samtools index -@ 8 Aligned.mm2.sorted.bam
-
-fn test_progs () -> Result<(), Box<dyn Error>>{
-    let _output = Command::new("samtools")
-                    .arg("-h")
-                    .stderr(Stdio::piped())
-                    .stdout(Stdio::piped())
-                     .output()
-                     .expect("\n\n*******Failed to execute samtools*******\n\n");
-    Ok(())
-}
-
-
-fn align (params: &Paramsm)-> Result<(), Box<dyn Error>> {
-    let align_sam = &params.output_path.join("Aligned.sam").clone().to_owned();
-    let align_sorted_sam = &params.output_path.join("Aligned.sorted.sam").clone().to_owned();
-    let align_sorted_bam = &params.output_path.join("Aligned.sortedByCoord.out.bam").clone().to_owned();
-    let fastq = &params.output_path.join("mutcaller_R1.fq.gz").clone().to_owned();
-    let outfolder = &params.output_path.join("").clone().to_owned();
-    let mut zcat_cmd = "zcat";
-    if cfg!(target_os = "macos") {
-        zcat_cmd = "zcat <";
-    }
-    if params.aligner.flavor == AlignerFlavor::Minimap2 {
-        let command = &params.aligner.loc.to_owned();
-        let args = &params.aligner.args.clone();
-        if params.verbose {
-        eprintln!("{}", "Aligning reads using minimap2");
-        }
-        info!("{}", "Aligning reads using minimap2");
-        let mut output = Command::new(&command);
-        output.args(["--MD", "-Y"]);
-        output.arg("-a");
-        output.arg(params.genome.to_string());
-        output.arg("-t");
-        output.arg(params.threads.to_string());
-        output.arg("-o");
-        output.arg(align_sam.to_str().unwrap());
-        if params.aligner.args.is_some(){
-            output.args(&*args.clone().unwrap());
-        }
-        output.arg(fastq.to_str().unwrap());
-        output.stderr(Stdio::piped());
-        output.stdout(Stdio::piped());
-        let output = output.output()
-                .expect("\n\n*******Failed to execute minimap2*******\n\n");
-        if params.verbose {
-            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
-            eprintln!("{}", "Minimap2 complete; Running samtools sort");
-        }
-        info!("{}", String::from_utf8_lossy(&output.stderr));
-        info!("{}", "Minimap2 complete; Running samtools sort");
-        let output = Command::new("samtools")
-                    .arg("sort")
-                    .arg("-@")
-                    .arg(params.threads.to_string())
-                    .arg("-o")
-                    .arg(align_sorted_sam.to_str().unwrap())
-                    .arg(align_sam.to_str().unwrap())
-                    .stderr(Stdio::piped())
-                    .stdout(Stdio::piped())
-                    .output()
-                     .expect("\n\n*******Failed to execute samtools view*******\n\n");
-        if params.verbose {
-            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
-            eprintln!("{}", "Samtools sort complete; Running samtools view");
-        }
-        info!("{}", String::from_utf8_lossy(&output.stderr));
-        info!("{}", "Samtools sort complete; Running samtools view");
-        let output = Command::new("samtools")
-                        .arg("view")
-                        .arg("-b")
-                        .arg("-@")
-                        .arg(params.threads.to_string())
-                        .arg("-o")
-                        .arg(align_sorted_bam.to_str().unwrap())
-                        .arg(align_sorted_sam.to_str().unwrap())
-                        .stderr(Stdio::piped())
-                        .stdout(Stdio::piped())
-                        .output()
-                         .expect("\n\n*******Failed to execute samtools sort*******\n\n");
-        if params.verbose {
-            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
-            eprintln!("{}", "Samtools view complete; Running samtools index");
-        }
-        info!("{}", String::from_utf8_lossy(&output.stderr));
-        info!("{}", "Samtools view complete; Running samtools index");
-    }
-  //   /app/software/CellRanger/6.0.1/lib/bin/STAR --genomeDir $transcriptome/star --readFilesIn ${fq3} --readNameSeparator space \
-  // --runThreadN 24 --outSAMunmapped Within KeepPairs --outSAMtype BAM SortedByCoordinate
-
-    if params.aligner.flavor == AlignerFlavor::STAR {
-        // set ulimit
-        let command = &params.aligner.loc.to_owned();
-        let args = &params.aligner.args.clone();
-        if params.verbose {
-        eprintln!("{}", "Aligning reads using STAR");
-        }
-        info!("{}", "Aligning reads using STAR");
-        let mut output = Command::new(command);
-        output.arg("--outFileNamePrefix");
-        output.arg(outfolder.to_str().unwrap());
-        output.arg("--genomeDir");
-        output.arg(params.genome.to_string());
-        output.arg("--readFilesIn");
-        output.arg(fastq.to_str().unwrap());
-        output.arg("--readNameSeparator");
-        output.arg("space");
-        output.arg("--runThreadN");
-        output.arg(params.threads.to_string());
-        output.arg("--outSAMunmapped");
-        output.arg("Within");
-        output.arg("KeepPairs");
-        output.arg("--outSAMtype");
-        output.arg("BAM");
-        output.arg("SortedByCoordinate");
-        output.arg("--outSAMattributes");
-        output.arg("All");
-        output.arg("--readFilesCommand");
-        output.arg(zcat_cmd);
-        output.stderr(Stdio::piped());
-        output.stdout(Stdio::piped());
-        if params.aligner.args.is_some(){
-            output.args(&*args.clone().unwrap());
-        }
-        let output = output.output()
-                .expect("\n\n*******Failed to execute STAR*******\n\n");
-        if params.verbose {
-            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
-            eprintln!("{}", "STAR complete; running samtools index");
-        }
-    }
-    if params.aligner.flavor == AlignerFlavor::BWA {
-        let stdout = File::create(align_sam.to_str().unwrap()).expect("failed to open output file for bwa mem");
-        let command = &params.aligner.loc.to_owned();
-        let args = &params.aligner.args.clone();
-        if params.verbose {
-        eprintln!("{}", "Aligning reads using bwa mem");
-        }
-        info!("{}", "Aligning reads using bwa mem");
-        // bwa mem -o R1_mem.sam $fa mutcaller_R1.fq.gz
-        let mut output = Command::new(command);
-        output.arg("mem");
-        output.arg("-t");
-        output.arg(params.threads.to_string());
-        if params.aligner.args.is_some(){
-            output.args(&*args.clone().unwrap());
-        }
-        output.arg(params.genome.to_string());
-        output.arg(fastq.to_str().unwrap());
-        // output.arg(">");
-        // output.arg(align_sam.to_str().unwrap());
-        output.stderr(Stdio::piped());
-        output.stdout(stdout);
-        eprintln!("{:?}", output);
-        let output = output.output()
-                .expect("\n\n*******Failed to execute bwa*******\n\n");
-        if params.verbose {
-                eprintln!("{}", String::from_utf8_lossy(&output.stderr));
-                eprintln!("{}", "bwa mem complete; Running samtools sort");
-            }
-        info!("{}", String::from_utf8_lossy(&output.stderr));
-        info!("{}", "bwa mem complete; Running samtools sort");
-        let output = Command::new("samtools")
-                    .arg("sort")
-                    .arg("-@")
-                    .arg(params.threads.to_string())
-                    .arg("-o")
-                    .arg(align_sorted_sam.to_str().unwrap())
-                    .arg(align_sam.to_str().unwrap())
-                    .stderr(Stdio::piped())
-                    .stdout(Stdio::piped())
-                    .output()
-                     .expect("\n\n*******Failed to execute samtools view*******\n\n");
-        if params.verbose {
-            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
-            eprintln!("{}", "Samtools sort complete; Running samtools view");
-        }
-        info!("{}", String::from_utf8_lossy(&output.stderr));
-        info!("{}", "Samtools sort complete; Running samtools view");
-        let output = Command::new("samtools")
-                        .arg("view")
-                        .arg("-b")
-                        .arg("-@")
-                        .arg(params.threads.to_string())
-                        .arg("-o")
-                        .arg(align_sorted_bam.to_str().unwrap())
-                        .arg(align_sorted_sam.to_str().unwrap())
-                        .stderr(Stdio::piped())
-                        .stdout(Stdio::piped())
-                        .output()
-                         .expect("\n\n*******Failed to execute samtools sort*******\n\n");
-        if params.verbose {
-            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
-            eprintln!("{}", "Samtools view complete; Running samtools index");
-        }
-        info!("{}", String::from_utf8_lossy(&output.stderr));
-        info!("{}", "Samtools view complete; Running samtools index");
-    }
-    let output = Command::new("samtools")
-                    .arg("index")
-                    .arg("-@")
-                    .arg(params.threads.to_string())
-                    .arg(align_sorted_bam.to_str().unwrap())
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .output()
-                     .expect("\n\n*******Failed to execute samtools index*******\n\n");
-    if params.verbose {
-        eprintln!("{}", String::from_utf8_lossy(&output.stderr));
-    }
-    info!("{}", String::from_utf8_lossy(&output.stderr));
-    if !params.keep && params.aligner.flavor == AlignerFlavor::Minimap2 {
-        fs::remove_file(align_sorted_sam.to_str().unwrap())?;
-        fs::remove_file(align_sam.to_str().unwrap())?;
-        fs::remove_file(fastq.to_str().unwrap())?;
-    }
-
-    if !params.keep && params.aligner.flavor == AlignerFlavor::STAR {
-        fs::remove_file(fastq.to_str().unwrap())?;
-        let possible_tmp = params.output_path.join("_STARtmp");
-        if possible_tmp.exists(){
-            fs::remove_dir_all(possible_tmp)?;
-        }
-    }
-    Ok(())
-}
-
-
-
-
-pub fn writer_fn (count_vec: Vec<Vec<Vec<u8>>>, params: &Paramsm) -> Result<(), Box<dyn Error>> {
-        let counts_path = &params.output_path.join("counts.txt.gz");
-        let counts_file = counts_path.to_str().unwrap();
-        info!("\n\n\tWriting counts to : '{}'\n", counts_file);
-        if params.verbose{
-            eprintln!("Writing counts to : '{}'\n", counts_file);
-        }
-        let f = File::create(counts_file)?;
-        let mut gz = GzBuilder::new()
-                        .filename(counts_file)
-                        .write(f, Compression::default());
-        for result in count_vec {
-                for subresult in result {
-                    gz.write_all(&subresult)?;
-                }
-        }
-        gz.finish()?;
-        Ok(())
-}
-
-
-
-
-// fn remove_whitespace(s: &mut String) {
-//     s.retain(|c| !c.is_whitespace());
-// }
-
 fn replace_slice<T>(source: &mut [T], from: &[T], to: &[T])
 where
     T: Clone + PartialEq,
 {
-    let iteration = if source.starts_with(from) {
+    if source.starts_with(from) {
         source[..from.len()].clone_from_slice(to);
-        from.len()
-    } else {
-        1
-    };
+    }
 
     if source.len() > from.len() {
-        replace_slice(&mut source[iteration..], from, to);
+        replace_slice(&mut source[from.len()..], from, to);
     }
 }
 
-
-fn fix_fastq_header(mut header: Vec<u8>, split: &[u8], barcode: &[u8]) -> Vec<u8>
-{   
-    replace_slice(&mut header, &[32], &[95]); // using an underscore to replace spaces in name of read.  this can be changed if it becomes a problem
-    for value in split {
-        header.push(*value)
-    }
-    for value in barcode {
-        header.push(*value)
-    }
-    return header
+fn fix_fastq_header(mut header: Vec<u8>, split: &[u8], barcode: &[u8]) -> Vec<u8> {
+    replace_slice(&mut header, &[32], &[95]);
+    header.extend_from_slice(split);
+    header.extend_from_slice(barcode);
+    header
 }
 
-fn fastq(params: &Paramsm) -> Result<(), Box<dyn Error>>{
-    let outfastq_temp = &params.output_path.join("mutcaller_R1.fq.gz").clone().to_owned();
+fn fastq(params: &Paramsm) -> Result<(), Box<dyn Error>> {
+    let outfastq_temp = params.output_path.join("mutcaller_R1.fq.gz");
     let outfastq = outfastq_temp.to_str().unwrap();
-    let split = "|BARCODE=".to_string();
+    let split = "|BARCODE=".as_bytes();
     let mut cbvec = lines_from_file(&params.bcs);
     cbvec.sort_unstable();
-    let _zip = true;
     let mut total_count: usize = 0;
     let mut nfound_count: usize = 0;
     let mut mmcb_count: usize = 0;
     let mut mm_count: usize = 0;
-    let split_at = &params.umi_len + &params.cb_len;
-    // let sep: Vec::<u8> = params.name_sep.as_bytes().to_vec();
+    let split_at = params.umi_len + params.cb_len;
 
-    let fastq1 = &params.fastq1;
-    let fastq2 = &params.fastq2;
-    let _counts = (0u64, 0u64);
-    let path = Path::new(&outfastq);
-    let _file = match File::create(&path) {
-        Err(_why) => panic!("couldn't open {}", path.display()),
-        Ok(file) => file,
-    };
-    // let mut writer = io::stdout();
     let f = File::create(&outfastq)?;
     let mut writer = GzBuilder::new()
-                            .filename(outfastq)
-                            .write(f, Compression::default());
-    parse_path(Some(fastq1), |parser1| {
-        parse_path(Some(fastq2), |parser2| {
+        .filename(outfastq)
+        .write(f, Compression::default());
+    parse_path(Some(&params.fastq1), |parser1| {
+        parse_path(Some(&params.fastq2), |parser2| {
             each_zipped(parser1, parser2, |rec1, rec2| {
-                if rec1.is_some() & rec2.is_some(){
-                    let r1 = &rec1.unwrap();
-                    let r2 = &rec2.unwrap();
-                    if r1.seq().contains(&b"N"[0]) | r2.seq().contains(&b"N"[0]){
+                if let (Some(r1), Some(r2)) = (rec1, rec2) {
+                    if r1.seq().contains(&b'N') || r2.seq().contains(&b'N') {
                         nfound_count += 1;
-                        total_count +=1;
-                    } else if r2.seq().len()!=r2.qual().len(){
-                        mm_count +=1;
-                        total_count +=1;
-                    } else{
-                        total_count +=1;
-                        let (barcode, _seq) = &r1.seq().split_at(split_at.into());
-                        let (cb, _seq) = barcode.split_at(params.cb_len as usize);
-                        match cbvec.binary_search(&std::str::from_utf8(cb).unwrap().to_string()) {
-                            Ok(_u) => {
-                                
-                                // old method # this seems to cause unpredictable albeit extremely rare errors in writing fastq.  Better to create a new OwnedRecord than to make owned from RefRecord
-                                // let mut readout = RefRecord::to_owned_record(&r2);
-                                // let _some_x = vec![b" "];
-                                // let mut new_headerO = std::str::from_utf8(&r2.head()).unwrap().to_string();
-                                // remove_whitespace(&mut new_headerO);
-                                // let _ = new_headerO.push_str(&split);
-                                // let _ = new_headerO.push_str(&std::str::from_utf8(&barcode).unwrap().to_string());
-                                // eprintln!("{:?}", new_headerO);
-                                // readout.head = new_headerO.into();
-                                // let _ = readout.write(&mut writer);
-                                //
-
-                                // new method
-                                let new_header = fix_fastq_header((&r2.head()).to_vec(), &split.clone().into_bytes(), &barcode);
-                                // eprintln!("{:?}", std::str::from_utf8(&new_header).unwrap());
-                                let readout = OwnedRecord{
-                                    head: new_header.to_vec(),
-                                    seq: (&r2.seq()).to_vec(),
-                                    sep: Some(vec!(43)),  
-                                    qual: (&r2.qual()).to_vec()
-                                };
-                                let _ = readout.write(&mut writer);
-                                //
-
-                                
-                            }
-                            Err(_e) => {
-                                mmcb_count +=1;
-                            }
+                    } else if r2.seq().len() != r2.qual().len() {
+                        mm_count += 1;
+                    } else {
+                        total_count += 1;
+                        let (barcode, _) = r1.seq().split_at(split_at);
+                        let (cb, _) = barcode.split_at(params.cb_len);
+                        if cbvec.binary_search(&str::from_utf8(cb).unwrap().to_string()).is_ok() {
+                            let new_header = fix_fastq_header(r2.head().to_vec(), split, barcode);
+                            let readout = OwnedRecord {
+                                head: new_header,
+                                seq: r2.seq().to_vec(),
+                                sep: Some(vec![43]),
+                                qual: r2.qual().to_vec(),
+                            };
+                            readout.write(&mut writer).unwrap();
+                        } else {
+                            mmcb_count += 1;
                         }
                     }
                 }
                 (true, true)
-            })
-            .expect("Invalid record.");
-        })
-        .expect("Unknown format for file 2.");
-    })
-    .expect("Unknown format for file 1.");
+            }).expect("Invalid record.");
+        }).expect("Unknown format for file 2.");
+    }).expect("Unknown format for file 1.");
+
     info!("\n\n\tTotal number of reads processed: {}, {} of these had Ns, {} of these had BC not in whitelist, {} of these had mismatched length of sequence and quality\n", total_count, nfound_count, mmcb_count, mm_count);
     if params.verbose {
         eprintln!("Total number of reads processed: {}, {} of these had Ns, {} of these had BC not in whitelist, {} of these had mismatched length of sequence and quality\n", total_count, nfound_count, mmcb_count, mm_count);
@@ -916,593 +290,494 @@ fn fastq(params: &Paramsm) -> Result<(), Box<dyn Error>>{
     Ok(())
 }
 
-
-
-pub fn process_variant(ref_id: u32, start: u32)->bam::Region{
-    let region = bam::Region::new(ref_id,start - 1,start - 1);
-    return region;
+fn process_variant(ref_id: u32, start: u32) -> bam::Region {
+    bam::Region::new(ref_id, start - 1, start - 1)
 }
 
-pub fn count_variants_helper(paramsm: Option<&Paramsm>, params: Option<&Params>, variant: Variant)-> Option<Vec<Vec<u8>>> {
-        if variant.class.clone().unwrap() == VariantClass::SNV {
-            if paramsm.is_some(){
-                let verbose = paramsm.unwrap().verbose;
-                let cb_len = paramsm.unwrap().cb_len;
-                let ibam_temp = paramsm.as_ref().unwrap().output_path.join("Aligned.sortedByCoord.out.bam").clone().to_owned();
-                return Some(count_variants_snv(ibam_temp.to_str().unwrap(), verbose, Some(cb_len), variant, Some("|BARCODE=".to_string()), None))
-            } else {
-                let cb_tag_b = string_pop(params.unwrap().cb_tag.as_bytes());
-                let umi_tag_b = string_pop(params.unwrap().umi_tag.as_bytes());
-                let verbose = params.unwrap().verbose;
-                return Some(count_variants_snv(&params.unwrap().bam, verbose, None, variant, None, Some((cb_tag_b, umi_tag_b))))
+pub fn count_variants_helper(paramsm: Option<&Paramsm>, params: Option<&Params>, variant: Variant) -> Option<Vec<Vec<u8>>> {
+    let result = match variant.class.clone()? {
+        VariantClass::SNV => {
+            let verbose = paramsm.map_or_else(|| params.unwrap().verbose, |p| p.verbose);
+            let cb_len = paramsm.map_or_else(|| None, |p| Some(p.cb_len));
+            let ibam_temp = paramsm.map_or_else(|| None, |p| Some(p.output_path.join("Aligned.sortedByCoord.out.bam").to_str().unwrap().to_string()));
+            count_variants_snv(ibam_temp.as_deref(), verbose, cb_len, variant.clone(), Some("|BARCODE=".to_string()), None)
+        }
+        VariantClass::Deletion | VariantClass::Insertion => {
+            let verbose = paramsm.map_or_else(|| params.unwrap().verbose, |p| p.verbose);
+            let cb_len = paramsm.map_or_else(|| None, |p| Some(p.cb_len));
+            let ibam_temp = paramsm.map_or_else(|| None, |p| Some(p.output_path.join("Aligned.sortedByCoord.out.bam").to_str().unwrap().to_string()));
+            count_variants_indel(ibam_temp.as_deref(), verbose, cb_len, variant.clone(), Some("|BARCODE=".to_string()), None)
+        }
+        _ => {
+            warn!("\n\n\tVariant type {:?} not currently supported", variant.class.as_ref().unwrap());
+            if paramsm.unwrap().verbose {
+                eprintln!("\n\n\tVariant type {:?} not currently supported", variant.class.clone().unwrap());
             }
+            None
         }
-        if variant.class.clone().unwrap() == VariantClass::Deletion || variant.class.clone().unwrap() == VariantClass::Insertion{
-            if paramsm.is_some(){
-                let verbose = paramsm.unwrap().verbose;
-                let cb_len = paramsm.unwrap().cb_len;
-                let ibam_temp = paramsm.as_ref().unwrap().output_path.join("Aligned.sortedByCoord.out.bam").clone().to_owned();
-                return Some(count_variants_indel(ibam_temp.to_str().unwrap(), verbose, Some(cb_len), variant, Some("|BARCODE=".to_string()), None))
-            } else {
-                let cb_tag_b = string_pop(params.unwrap().cb_tag.as_bytes());
-                let umi_tag_b = string_pop(params.unwrap().umi_tag.as_bytes());
-                let verbose = params.unwrap().verbose;
-                return Some(count_variants_indel(&params.unwrap().bam, verbose, None, variant, None, Some((cb_tag_b, umi_tag_b))))
-            }
-        }
-        warn!("\n\n\tVariant type {:?} not currently supported", variant.class.as_ref().unwrap());
-       if paramsm.unwrap().verbose {
-            eprintln!("\n\n\tVariant type {:?} not currently supported", variant.class.unwrap());
-        }
-        return None
+    };
+
+    result.or_else(|| Some(fallback_count_variants(&variant)))
 }
 
-pub fn string_pop(slice: &[u8]) -> &[u8; 2] {
+fn fallback_count_variants(_variant: &Variant) -> Vec<Vec<u8>> {
+    vec![b"fallback data".to_vec()]
+}
+
+fn string_pop(slice: &[u8]) -> &[u8; 2] {
     slice.try_into().expect("slice with incorrect length")
 }
 
-pub fn get_cb(split: Option<String>, cb_len: Option<usize>, readname: String, record: &bam::Record, tags: Option<(&[u8], &[u8])>)->Result<(String,String), io::Error>{
-    let barcode_error = IoError::new(ErrorKind::Other, "Cell barcode / UMI not found");
-    if split.is_some(){
-        let cbumi = match readname.split(split.as_ref().unwrap()).nth(1){
-            Some(v) => v.to_string(),
-            None => {
-                return Err(barcode_error)
-            },
-        };
-        if cbumi.len() <= cb_len.unwrap()+1 {
-            return Err(barcode_error)
-        }
-        let (cb, umi) = cbumi.split_at((cb_len.unwrap()+1).into());
-        return Ok((cb.to_string(), umi.to_string()));
+fn get_cb(split: Option<String>, cb_len: Option<usize>, readname: String, record: &bam::Record, tags: Option<(&[u8], &[u8])>) -> Result<(String, String), IoError> {
+    // let barcode_error = IoError::new(ErrorKind::Other, "Cell barcode / UMI not found");
+    if let Some(split_str) = split {
+        let cbumi = readname.split(&split_str).nth(1).ok_or_else(|| IoError::new(ErrorKind::Other, "Cell barcode / UMI not found"))?;
+        let (cb, umi) = cbumi.split_at(cb_len.unwrap() + 1);
+        Ok((cb.to_string(), umi.to_string()))
     } else {
         let cb_tag_b = string_pop(tags.unwrap().0);
         let umi_tag_b = string_pop(tags.unwrap().1);
-        let cb = match record.tags().get(cb_tag_b) {
-            Some( bam::record::tags::TagValue::String(cba, _)) => str::from_utf8(&cba).unwrap().to_string(),
-            _ => {
-                // eprintln!("ERROR: 'CB' not found");
-                return Err(barcode_error)
-            }
-        };
-        let umi = match record.tags().get(umi_tag_b) {
-            Some( bam::record::tags::TagValue::String(uma, _)) => str::from_utf8(&uma).unwrap().to_string(),
-            _ => {
-                // eprintln!("ERROR: 'CB' not found");
-                return Err(barcode_error)
-            }
-        };
-        return Ok((cb, umi));
-    }  
+        let cb = record.tags().get(cb_tag_b).and_then(|tag| match tag {
+            bam::record::tags::TagValue::String(cba, _) => Some(str::from_utf8(&cba).unwrap().to_string()),
+            _ => None,
+        }).ok_or_else(|| IoError::new(ErrorKind::Other, "Cell barcode / UMI not found"))?;
+        let umi = record.tags().get(umi_tag_b).and_then(|tag| match tag {
+            bam::record::tags::TagValue::String(uma, _) => Some(str::from_utf8(&uma).unwrap().to_string()),
+            _ => None,
+        }).ok_or_else(|| IoError::new(ErrorKind::Other, "Cell barcode / UMI not found"))?;
+        Ok((cb, umi))
+    }
 }
 
-pub fn get_header_seqs(header: bam::Header)->Vec<String>{
-    let mut seqnames = Vec::new();
-    let hdata = header.reference_names();
-    for seq in hdata {
-        seqnames.push(seq.to_string())
-    }
-    return seqnames
+fn get_header_seqs(header: bam::Header) -> Vec<String> {
+    header.reference_names().iter().map(|seq| seq.to_string()).collect()
 }
 
-#[allow(unused_comparisons)]
-pub fn count_variants_snv(ibam: &str, verbose: bool, cb_len: Option<usize>, variant: Variant, split: Option<String>, tags: Option<(&[u8], &[u8])>) -> Vec<Vec<u8>>{
-    let debug = false;
-    let mut data = Vec::new();
-    //counters
-    let mut total: usize = 0;
-    let mut err: usize = 0;
-    let mut query: usize = 0;
-    let mut reference: usize = 0;
-    let mut other: usize = 0;
-    //variant
-    let seqname = variant.seq;
-    let start = variant.start.parse::<u32>().unwrap();
-    let vname = variant.name;
-    let query_nt = variant.query_nt.chars().nth(0);
-    let us_ref_nt = variant.ref_nt.chars().nth(0);
-    //open bam
-    let mut reader = bam::IndexedReader::build()
-        .from_path(&ibam).unwrap();
-    let seqnames = get_header_seqs(reader.header().clone());
-    let ref_id = seqnames.iter().position(|r| r.to_owned() == seqname).unwrap();
-    let region = process_variant(ref_id as u32, start);
-    //process reads
-    for record in reader.fetch(&&region).unwrap(){
-        total+=1;
-        let mut _result: Option<MatchType> = None;
-        let readname = match str::from_utf8(record.as_ref().unwrap().name()) {
-            Ok(v) => v,
-            Err(e) => panic!("\n\n*******Invalid UTF-8 sequence: {}*******\n\n", e),
-        };
-        let Ok((cb, umi)) = get_cb(split.clone(), cb_len, readname.to_string(), record.as_ref().unwrap(), tags) else {
-            err+=1;
-            continue
-        };
-        for entry in record.as_ref().unwrap().alignment_entries().unwrap() {
-            if let Some((ref_pos, ref_nt)) = entry.ref_pos_nt() {
-                if ref_pos == variant.start.parse::<u32>().unwrap() - 1 {
-                    if let Some((_record_pos, record_nt)) = entry.record_pos_nt() {
-                        if record_nt as char == us_ref_nt.unwrap() && !entry.is_insertion() && !entry.is_deletion(){
-                            if debug{
-                                eprintln!("reference nt = {}\n record_nt = {}\n ergo: reference", ref_nt as char, record_nt as char);
-                            }
-                            // eprintln!("number {}; ref_nt {}; rec_nt {}; Insertion: {}", total, ref_nt, record_nt, entry.is_insertion());
-                            _result = Some(MatchType::Ref);
-                            reference+=1;
-                        } else if record_nt as char == query_nt.unwrap() && !entry.is_insertion() && !entry.is_deletion() {
-                            // eprintln!("number {}; ref_nt {}; rec_nt {}; Insertion: {}", total, ref_nt, record_nt, entry.is_insertion());
-                            _result = Some(MatchType::Query);
-                            if debug{
-                                eprintln!("reference nt = {}\n record_nt = {}\n ergo: query", ref_nt as char, record_nt as char);
-                            }
-                            query+=1;
-                        } else if record_nt == b'N'{
-                            err+=1;
-                            continue
-                        } else {
-                            // eprintln!("number {}; ref_nt {}; rec_nt {}; Insertion: {}", total, ref_nt, record_nt, entry.is_insertion());
-                            _result = Some(MatchType::Other);
-                            if debug{
-                                eprintln!("reference nt = {}\n record_nt = {}\n ergo: other", ref_nt as char, record_nt as char);
-                            }
-                            other+=1;
-                        }   
-                            // eprintln!("{:?}", "pushing snv variant");
-                            data.push(format!("{} {} {} {} {} {:?}", cb, umi, seqname, start, vname, _result.unwrap()))
-                        }
-                    } else {
-                        continue
-                    }
-            } else {
-                continue
-            }        }
-    }
-    info!("\n\n\tFound {} reads spanning variant: {}!\n\tNumbers of errors: {}", total, vname, err);
-    if verbose{
-        eprintln!("Found {} reads spanning variant: {}!\n\tNumbers of errors: {}", total, vname, err);
-    }
-    info!("\t\t\tQuery: {}\n\t\t\tReference: {}\n\t\t\tOther: {}", query, reference, other);
-    if verbose{
-        eprintln!("\t\tQuery: {}\n\t\tReference: {}\n\t\tOther: {}", query, reference, other);
-    }
-    data.sort();
-    let mut out_vec = Vec::new();
-    let cdata = data.into_iter().dedup_with_count();
-    for (count, record) in cdata {
-       let count_str = record+&" ".to_owned()+&(count.to_string()+&"\n".to_owned());
-        out_vec.push(count_str.as_bytes().to_owned());
-    }
-    return out_vec;
-}
-
-#[derive(PartialEq)]
-#[derive(Clone)]
-pub struct SequenceMatch{
-    still_to_check: usize,
-    final_result: Option<MatchType>
-}
-
-#[derive(Debug)]
-#[derive(PartialEq)]
-#[derive(Clone)]
-pub enum MatchType {
+#[derive(Debug, PartialEq, Clone)]
+enum MatchType {
     Ref,
     Query,
-    Other
+    Other,
 }
 
-
-#[allow(unused_comparisons)]
-pub fn count_variants_indel(ibam: &str, verbose: bool, cb_len: Option<usize>, variant: Variant, split: Option<String>, tags: Option<(&[u8], &[u8])>) -> Vec<Vec<u8>>{
-    let mut data = Vec::new();
-    //counters
-    let mut total: usize = 0;
-    let mut err: usize = 0;
-    let mut query: usize = 0;
-    let mut reference: usize = 0;
-    let mut other: usize = 0;
-    //variant
-    let seqname = variant.seq;
-    let start = variant.start.parse::<u32>().unwrap();
-    let vname = variant.name;
-    //open bam
-    let mut reader = bam::IndexedReader::build()
-        .from_path(&ibam).unwrap();
-    let seqnames = get_header_seqs(reader.header().clone());
-    let ref_id = seqnames.iter().position(|r| r.to_owned() == seqname).unwrap();
-    let region = process_variant(ref_id as u32, start);
-    //process reads
-    for record in reader.fetch(&&region).unwrap(){
-    // for record in reader.fetch_by(&&region, |record| record.mapq() >= 4 && (record.flag().all_bits(0 as u16) || record.flag().all_bits(16 as u16))).unwrap(){
-        total+=1;
-        let mut _result: Option<MatchType> = None;
-        let readname = match str::from_utf8(record.as_ref().unwrap().name()) {
-            Ok(v) => v,
-            Err(e) => panic!("\n\n*******Invalid UTF-8 sequence: {}*******\n\n", e),
-        };
-        let Ok((cb, umi)) = get_cb(split.clone(), cb_len, readname.to_string(), record.as_ref().unwrap(), tags) else {
-            err+=1;
-            continue
-        };
-        if variant.class==Some(VariantClass::Insertion){
-            let mut ins_result = SequenceMatch{
-                // sofar: None,
-                still_to_check: variant.query_nt.len(),
-                final_result: None
-            };
-            for entry in record.as_ref().unwrap().alignment_entries().unwrap() {
-                // eprintln!("{} record no: {:?}, is insertion: {}, is_deletion: {}, is left: {}", total, entry, entry.is_insertion(), entry.is_deletion(), ins_result.still_to_check);
-                if let Some((ref_pos, ref_nt)) = entry.ref_pos_nt() {
-                    // eprintln!("number {}; ref_nt {}; Insertion: {}; Deletio: {}", total, ref_nt, entry.is_insertion());
-                    if ref_pos >= start - 1 {
-                        // eprintln!("{} record no: {:?}, is insertion: {}, is_deletion: {}, is left: {}", total, entry, entry.is_insertion(), entry.is_deletion(), ins_result.still_to_check);
-                        if let Some((_record_pos, record_nt)) = entry.record_pos_nt(){
-                            if variant.query_nt.len() == ins_result.still_to_check {
-                                // first entry of indel should always be ref; if not is other
-                                if record_nt as char != ref_nt as char {
-                                    ins_result.final_result = Some(MatchType::Other);
-                                    other+=1;
-                                }
-                                ins_result.still_to_check-=1;
-                            } else if record_nt as char == variant.query_nt.chars().nth(variant.query_nt.len()-ins_result.still_to_check).unwrap() as char && entry.is_insertion(){
-                                // if rec matches query at next position; subtract from the num let to check and continue
-                                ins_result.still_to_check-=1;
-                                if ins_result.still_to_check  == 0 {
-                                    ins_result.final_result = Some(MatchType::Query);
-                                    query+=1;
-                                }
-                            } else if record_nt as char == ref_nt as char && !entry.is_insertion(){
-                                // if rec matches ref at next posistion and isn't insertion, keep checking through length of variant
-                                ins_result.still_to_check-=1;
-                                if ins_result.still_to_check  == 0 {
-                                    ins_result.final_result = Some(MatchType::Ref);
-                                    reference+=1;
-                                }
-                            } else if record_nt as char != ref_nt as char  && record_nt as char  != variant.query_nt.chars().nth(variant.query_nt.len()-ins_result.still_to_check).unwrap() as char{
-                                ins_result.still_to_check-=1;
-                                if ins_result.still_to_check  == 0 {
-                                    ins_result.final_result = Some(MatchType::Other);
-                                    other+=1;
-                                }
-                            }
-                            if ins_result.final_result.is_some(){
-                                // eprintln!("{:?}", "pushing del variant");
-                                data.push(format!("{} {} {} {} {} {:?}", &cb, &umi, seqname, start, vname, ins_result.final_result.clone().unwrap()));
-                                break
-                            } else {
-                                continue
-                            }
-                        } else {
-                            continue
-                        }
-                    }
-                } else {
-                    if let Some((_record_pos, record_nt)) = entry.record_pos_nt(){
-                        if record_nt as char == variant.query_nt.chars().nth(variant.query_nt.len()-ins_result.still_to_check).unwrap() as char && entry.is_insertion(){
-                            // if rec matches query at next position; subtract from the num let to check and continue
-                            ins_result.still_to_check-=1;
-                            if ins_result.still_to_check  == 0 {
-                                ins_result.final_result = Some(MatchType::Query);
-                                query+=1;
-                            }
-                        } else if record_nt as char != variant.query_nt.chars().nth(variant.query_nt.len()-ins_result.still_to_check).unwrap() as char{
-                            ins_result.still_to_check-=1;
-                            if ins_result.still_to_check  == 0 {
-                                ins_result.final_result = Some(MatchType::Other);
-                                other+=1;
-                            }
-                        }
-                        if ins_result.final_result.is_some(){
-                            // eprintln!("{:?}", "pushing del variant");
-                            data.push(format!("{} {} {} {} {} {:?}", &cb, &umi, seqname, start, vname, ins_result.final_result.clone().unwrap()));
-                            break
-                        } else {
-                            continue
-                        }
-                    } else {
-                        continue
-                    }
-                };
-            } // handle deletions     
-        } else {
-            let mut del_result = SequenceMatch{
-                // sofar: None,
-                still_to_check: variant.ref_nt.len(),
-                final_result: None
-            };
-            for entry in record.as_ref().unwrap().alignment_entries().unwrap() {
-                // eprintln!("{} record no: {:?}, is insertion: {}, is_deletion: {}, is left: {}", total, entry, entry.is_insertion(), entry.is_deletion(), del_result.still_to_check);
-                if let Some((ref_pos, ref_nt)) = entry.ref_pos_nt() {
-                    // eprintln!("number {}; ref_nt {}; Insertion: {}; Deletio: {}", total, ref_nt, entry.is_insertion());
-                    if ref_pos >= start - 1 {
-                        // eprintln!("{} record no: {:?}, is insertion: {}, is_deletion: {}, is left: {}", total, entry, entry.is_insertion(), entry.is_deletion(), del_result.still_to_check);
-                        if let Some((_record_pos, record_nt)) = entry.record_pos_nt(){
-                            if variant.ref_nt.len() == del_result.still_to_check {
-                                // first entry of indel should always be ref
-                                del_result.still_to_check-=1;
-                                if record_nt as char != ref_nt as char {
-                                    del_result.final_result = Some(MatchType::Other);
-                                    other+=1;
-                                }
-                            } else if record_nt as char == variant.ref_nt.chars().nth(variant.ref_nt.len()-del_result.still_to_check).unwrap() as char && entry.is_deletion(){
-                                // if rec matches query at next position; subtract from the num let to check and continue
-                                del_result.still_to_check-=1;
-                                if del_result.still_to_check  == 0 {
-                                    del_result.final_result = Some(MatchType::Query);
-                                    query+=1;
-                                }
-                            } else if record_nt as char == ref_nt as char && !entry.is_deletion(){
-                                // if rec matches ref at next posistion and isn't insertion, keep checking through length of variant
-                                del_result.still_to_check-=1;
-                                if del_result.still_to_check  == 0 {
-                                    del_result.final_result = Some(MatchType::Ref);
-                                    reference+=1;
-                                }
-                            } else if record_nt as char != ref_nt as char  && record_nt as char  != variant.ref_nt.chars().nth(variant.ref_nt.len()-del_result.still_to_check).unwrap() as char{
-                                del_result.still_to_check-=1;
-                                if del_result.still_to_check  == 0 {
-                                    del_result.final_result = Some(MatchType::Other);
-                                    other+=1;
-                                }
-                            }
-                            if del_result.final_result.is_some(){
-                                // eprintln!("{:?}", "pushing del variant");
-                                data.push(format!("{} {} {} {} {} {:?}", &cb, &umi, seqname, start, vname, del_result.final_result.clone().unwrap()));
-                                break
-                            } else {
-                                continue
-                            }
-                        } else {
-                            if ref_nt as char == variant.ref_nt.chars().nth(variant.ref_nt.len()-del_result.still_to_check).unwrap() as char && entry.is_deletion(){
-                                // if ref matches query at next position; subtract from the num let to check and continue
-                                del_result.still_to_check-=1;
-                                if del_result.still_to_check  == 0 {
-                                    del_result.final_result = Some(MatchType::Query);
-                                }
-                            } else if ref_nt as char != variant.ref_nt.chars().nth(variant.ref_nt.len()-del_result.still_to_check).unwrap() as char{
-                                del_result.still_to_check-=1;
-                                if del_result.still_to_check  == 0 {
-                                    del_result.final_result = Some(MatchType::Other);
-                                }
-                            }
-                            if del_result.final_result.is_some(){
-                                // eprintln!("{:?}", "pushing del variant");
-                                data.push(format!("{} {} {} {} {} {:?}", &cb, &umi, seqname, start, vname, del_result.final_result.clone().unwrap()));
-                                break
-                        } else {
-                                continue
-                            }
-                        }
-                    } else {
-                        continue
-                    }
-                };
-            } // handle deletions     
-        }
-    }
-    info!("\n\n\tFound {} reads spanning variant: {}!\n\tNumbers of errors: {}", total, vname, err);
-    if verbose{
-        eprintln!("Found {} reads spanning variant: {}!\n\tNumbers of errors: {}", total, vname, err);
-    }
-    info!("\t\t\tQuery: {}\n\t\t\tReference: {}\n\t\t\tOther: {}", query, reference, other);
-    if verbose{
-        eprintln!("\t\tQuery: {}\n\t\tReference: {}\n\t\tOther: {}", query, reference, other);
-    }
-    data.sort();
-    let mut out_vec = Vec::new();
-    let cdata = data.into_iter().dedup_with_count();
-    for (count, record) in cdata {
-       let count_str = record+&" ".to_owned()+&(count.to_string()+&"\n".to_owned());
-        out_vec.push(count_str.as_bytes().to_owned());
-    }
-    return out_vec;
+#[derive(PartialEq, Clone)]
+struct SequenceMatch {
+    still_to_check: usize,
+    final_result: Option<MatchType>,
 }
 
-
-
-
-// fn count_variants_mm(params: &Paramsm, variant: Variant) -> Vec<Vec<u8>>{
-//     eprintln!("Processing using cb and umi in BAM tags");
-//     // let split = "|BARCODE=".to_string();
-//     let ibam = "Aligned.mm2.bam";
-//     let mut total: usize = 0;
+// fn count_variants_snv(ibam: Option<&str>, verbose: bool, cb_len: Option<usize>, variant: Variant, split: Option<String>, tags: Option<(&[u8], &[u8])>) -> Option<Vec<Vec<u8>>> {
+//     let ibam = ibam?;
 //     let seqname = variant.seq;
 //     let start = variant.start.parse::<u32>().unwrap();
 //     let vname = variant.name;
-//     let mut reader = bam::IndexedReader::build()
-//         .additional_threads(*&params.threads as u16)
-//         .from_path(ibam).unwrap();
-//     let mut seqnames = Vec::new();
-//     let mut cb;
-//     let mut umi;
-//     let mut result = "null";
-//     let query_nt = variant.query_nt as char;
-//     let header = reader.header().clone();
-//     let hdata = header.reference_names();
-//     for seq in hdata {
-//         seqnames.push(seq)
-//     }
-//     let mut data = Vec::new();
-//     let ref_id = seqnames.iter().position(|&r| r == &seqname).unwrap();
-//     let region = process_variant(ref_id as u32, start);
-//     for record in reader.fetch_by(&&region, |record| record.mapq() > 4 && (record.flag().all_bits(0 as u16) || record.flag().all_bits(16 as u16))).unwrap(){
-//         total+=1;
-//         match record.as_ref().unwrap().tags().get(b"CB") {
-//             Some( bam::record::tags::TagValue::String(cba, _)) => {
-//                 cb = str::from_utf8(&cba).unwrap().to_string();
-//             },
-//             _ => panic!("Unexpected type"),
-//         }
-//         match record.as_ref().unwrap().tags().get(b"UB") {
-//             Some( bam::record::tags::TagValue::String(uba, _)) => {
-//                 umi = str::from_utf8(&uba).unwrap().to_string();
-//             },
-//             _ => panic!("Unexpected type"),
-//         }
-//         for entry in record.as_ref().unwrap().alignment_entries().unwrap() {
-//             if let Some((ref_pos, ref_nt)) = entry.ref_pos_nt() {
-//                 if region.start() == ref_pos {
+//     let query_nt = variant.query_nt.chars().nth(0);
+//     let us_ref_nt = variant.ref_nt.chars().nth(0);
 
-//                     if let Some((_record_pos, record_nt)) = entry.record_pos_nt() {
-//                         if ref_nt as char == record_nt as char {
-//                             result = "ref";
-//                         } else if record_nt as char == query_nt{
-//                             result = "query";
-//                         } else {
-//                             result = "other";
+//     let mut reader = bam::IndexedReader::build().from_path(&ibam).unwrap();
+//     let seqnames = get_header_seqs(reader.header().clone());
+//     let ref_id = seqnames.iter().position(|r| r == &seqname).unwrap();
+//     let region = process_variant(ref_id as u32, start);
+
+//     let mut data = Vec::new();
+//     let mut total = 0;
+//     let mut err = 0;
+//     let mut query = 0;
+//     let mut reference = 0;
+//     let mut other = 0;
+
+//     for record in reader.fetch(&region).unwrap() {
+//         total += 1;
+//         let mut _result: Option<MatchType> = None;
+//         let readname = match str::from_utf8(record.as_ref().unwrap().name()) {
+//             Ok(v) => v,
+//             Err(e) => panic!("\n\n*******Invalid UTF-8 sequence: {}*******\n\n", e),
+//         };
+//         if let Ok((cb, umi)) = get_cb(split.clone(), cb_len, readname.to_string(), record.as_ref().unwrap(), tags) {
+//             for entry in record.as_ref().unwrap().alignment_entries().unwrap() {
+//                 if let Some((ref_pos, _ref_nt)) = entry.ref_pos_nt() {
+//                     if ref_pos == start - 1 {
+//                         if let Some((_record_pos, record_nt)) = entry.record_pos_nt() {
+//                             if record_nt as char == us_ref_nt.unwrap() && !entry.is_insertion() && !entry.is_deletion() {
+//                                 _result = Some(MatchType::Ref);
+//                                 reference += 1;
+//                             } else if record_nt as char == query_nt.unwrap() && !entry.is_insertion() && !entry.is_deletion() {
+//                                 _result = Some(MatchType::Query);
+//                                 query += 1;
+//                             } else if record_nt == b'N' {
+//                                 err += 1;
+//                                 continue;
+//                             } else {
+//                                 _result = Some(MatchType::Other);
+//                                 other += 1;
+//                             }
+//                             data.push(format!("{} {} {} {} {} {:?}", cb, umi, seqname, start, vname, _result.unwrap()));
 //                         }
-//                             data.push(format!("{} {} {} {} {} {}", &cb, &umi, seqname, ref_pos, vname, result))
-//                         }
-//                     } else {
-//                         continue
 //                     }
-//             } else {
-//                 continue
-//             }        }
+//                 }
+//             }
+//         } else {
+//             err += 1;
+//         }
 //     }
-//     eprintln!("Found {} reads spanning this variant!", total);
+
+//     info!("\n\n\tFound {} reads spanning variant: {}!\n\tNumbers of errors: {}", total, vname, err);
+//     if verbose {
+//         eprintln!("Found {} reads spanning variant: {}!\n\tNumbers of errors: {}", total, vname, err);
+//     }
+//     info!("\t\t\tQuery: {}\n\t\t\tReference: {}\n\t\t\tOther: {}", query, reference, other);
+//     if verbose {
+//         eprintln!("\t\tQuery: {}\n\t\tReference: {}\n\t\tOther: {}", query, reference, other);
+//     }
+
 //     data.sort();
 //     let mut out_vec = Vec::new();
 //     let cdata = data.into_iter().dedup_with_count();
 //     for (count, record) in cdata {
-//         let count_str = record+&" ".to_owned()+&(count.to_string()+&"\n".to_owned());
-//         // let count_str = record+&" ".to_owned()+&(count.to_string())+&"\n".to_owned();
+//         let count_str = format!("{} {}\n", record, count);
 //         out_vec.push(count_str.as_bytes().to_owned());
 //     }
-//     return out_vec;
+//     Some(out_vec)
 // }
 
+fn count_variants_snv(
+    ibam: Option<&str>, 
+    verbose: bool, 
+    cb_len: Option<usize>, 
+    variant: Variant, 
+    split: Option<String>, 
+    tags: Option<(&[u8], &[u8])>
+) -> Option<Vec<Vec<u8>>> {
+    let ibam = ibam?;
+    let seqname = variant.seq;
+    let start = variant.start.parse::<u32>().ok()?;
+    let vname = variant.name;
+    let query_nt = variant.query_nt.chars().next()?;
+    let us_ref_nt = variant.ref_nt.chars().next()?;
 
-// fn count_star(params: &Paramsm) {
-//     let ibam = "Aligned.mm2.bam";
-//     let split = "|BARCODE=".to_string();
-//     let joiner = "_".to_string();
-//     eprintln!("Counting star reads");
-//     let mut total: usize = 0;
-//     let mut goodreadcount: usize = 0;
-//     let (_read_threads, _write_threads) = if (*&params.threads as i8) > 2{
-//         (((*&params.threads/2) -1) as usize, ((*&params.threads/2) -1) as usize)
-//     } else {
-//         (0 as usize, 0 as usize)
-//     };
+    let mut reader = bam::IndexedReader::build().from_path(&ibam).ok()?;
+    let seqnames = get_header_seqs(reader.header().clone());
+    let ref_id = seqnames.iter().position(|r| r == &seqname)?;
+    let region = process_variant(ref_id as u32, start);
 
-//     let reader = bam::BamReader::from_path(ibam.to_string(), 0).unwrap();
-//     let _output = std::io::BufWriter::new(io::stdout());
-//     let header = reader.header().clone();
-//     let data = header.reference_names();
-//     let mut seqnames = Vec::new();
-//     for seq in data {
-//         seqnames.push(seq)
-//     }
-//     for record in reader {
-//         total += 1;
-//         let newrecord = record.unwrap();
-//         let seqname = match str::from_utf8(&newrecord.name()) {
-//             Ok(v) => v,
-//             Err(e) => panic!("\n\n*******Invalid UTF-8 sequence: {}*******\n\n", e),
-//         };
-//         let cbumi= seqname.split(&split).nth(1).unwrap().to_string();
-//         let _modified_name = seqname.replace(&split, &joiner);
-//         let (cb_umi_s1, cb_umi_s2) = cbumi.split_at((params.cb_len+1).into());
-//         let mut good_read = false;
-//         let cigarmatch = format!("{}M", *&params.read_len);
-//         let cigar = newrecord.cigar().to_string();
-//         if cigar == cigarmatch{
-//             good_read = true
-//         }
-//         if good_read && ((newrecord.flag().to_string()=="Flag(16)") | (newrecord.flag().to_string()=="Flag(0)")){
-//             goodreadcount += 1;
-//             println!("{} {} {} {}", cb_umi_s1, cb_umi_s2, seqnames[newrecord.ref_id() as usize].to_string(), newrecord.start());
-//         }
-//     }
-//     eprintln!("Completed; {} total reads processed!", &total);
-//     eprintln!("{} good reads counted!", &goodreadcount);
-// }
+    let mut data = Vec::new();
+    let mut total = 0;
+    let mut err = 0;
+    let mut query = 0;
+    let mut reference = 0;
+    let mut other = 0;
 
+    for record in reader.fetch(&region).ok()? {
+        total += 1;
+        let readname = str::from_utf8(record.as_ref().unwrap().name()).ok()?;
+        if let Ok((cb, umi)) = get_cb(split.clone(), cb_len, readname.to_string(), record.as_ref().unwrap(), tags) {
+            for entry in record.as_ref().unwrap().alignment_entries().ok()? {
+                if let Some((ref_pos, _ref_nt)) = entry.ref_pos_nt() {
+                    if ref_pos == start - 1 {
+                        if let Some((_record_pos, record_nt)) = entry.record_pos_nt() {
+                            let match_type = if record_nt as char == us_ref_nt && !entry.is_insertion() && !entry.is_deletion() {
+                                reference += 1;
+                                MatchType::Ref
+                            } else if record_nt as char == query_nt && !entry.is_insertion() && !entry.is_deletion() {
+                                query += 1;
+                                MatchType::Query
+                            } else if record_nt == b'N' {
+                                err += 1;
+                                continue;
+                            } else {
+                                other += 1;
+                                MatchType::Other
+                            };
 
+                            data.push(format!("{} {} {} {} {} {:?}", cb, umi, seqname, start, vname, match_type));
+                        }
+                    }
+                }
+            }
+        } else {
+            err += 1;
+        }
+    }
 
-// fn count_kallisto(params: &Paramsm) {
-//     eprintln!("Counting kallisto reads");
-//     let mut total: usize = 0;
-//     let ibam = "Aligned.mm2.bam";
-//     let split = "|BARCODE=".to_string();
-//     let joiner = "_".to_string();
-//     let mut goodreadcount: usize = 0;
-//     let (_read_threads, _write_threads) = if (*&params.threads as i8) > 2{
-//         (((*&params.threads/2) -1) as usize, ((*&params.threads/2) -1) as usize)
-//     } else {
-//         (0 as usize, 0 as usize)
-//     };
-//     let reader = bam::BamReader::from_path(ibam.to_string(), 0).unwrap();
-//     let _output = io::BufWriter::new(io::stdout());
-//     let header = reader.header().clone();
-//     let data = header.reference_names();
-//     let mut seqnames = Vec::new();
-//     for seq in data {
-//         seqnames.push(seq)
-//     }
-//     for record in reader {
-//         total += 1;
-//         let newrecord = record.unwrap();
-//         let seqname = match str::from_utf8(&newrecord.name()) {
-//             Ok(v) => v,
-//             Err(e) => panic!("\n\n*******Invalid UTF-8 sequence: {}*******\n\n", e),
-//         };
-//         let cbumi= seqname.split(&split).nth(1).unwrap().to_string();
-//         let _modified_name = seqname.replace(&split, &joiner);
-//         let (cb_umi_s1, cb_umi_s2) = cbumi.split_at((params.cb_len+1).into());
-//         let mut good_read = false;
-//         let cigarmatch = format!("{}M", *&params.read_len);
-//         let cigar = newrecord.cigar().to_string();
-//         if cigar == cigarmatch{
-//             good_read = true
-//         }
-//         if good_read && ((newrecord.flag().to_string()=="Flag(16)") | (newrecord.flag().to_string()=="Flag(0)")){
-//             goodreadcount += 1;
-//             println!("{} {} {}", cb_umi_s1, cb_umi_s2, seqnames[newrecord.ref_id() as usize].to_string());
-//         }
-//     }
-//     eprintln!("Completed; {} total alignments processed!", &total);
-//     eprintln!("{} good alignments counted!", &goodreadcount);
-// }
+    log_counts(total, vname, err, query, reference, other, verbose);
 
-fn lines_from_file(filename: &str) -> Vec<String> {
-    let path = Path::new(filename);
-    let file = match File::open(&path) {
-        Err(_why) => panic!("\n\n*******couldn't open {}*******\n\n", path.display()),
-        Ok(file) => file,
-    };
-    if path.extension() == Some(OsStr::new("gz")){
-        let buf = BufReader::new(read::GzDecoder::new(file));
-        buf.lines()
-            .map(|l| l.expect("\n\n*******Could not parse line*******\n\n"))
-            .collect()
-    }else{
-        let buf = BufReader::new(file);
-        buf.lines()
-            .map(|l| l.expect("\n\n*******Could not parse line*******\n\n"))
-            .collect()
+    data.sort();
+    let mut out_vec = Vec::new();
+    for (count, record) in data.into_iter().dedup_with_count() {
+        out_vec.push(format!("{} {}\n", record, count).as_bytes().to_owned());
+    }
+
+    Some(out_vec)
+}
+fn count_variants_indel(
+    ibam: Option<&str>, 
+    verbose: bool, 
+    cb_len: Option<usize>, 
+    variant: Variant, 
+    split: Option<String>, 
+    tags: Option<(&[u8], &[u8])>
+) -> Option<Vec<Vec<u8>>> {
+    let ibam = ibam?;
+    let seqname = variant.seq.clone();
+    let start = variant.start.parse::<u32>().ok()?;
+    let vname = variant.name.clone();
+    let class = variant.class.clone()?;
+
+    let mut reader = bam::IndexedReader::build().from_path(&ibam).ok()?;
+    let seqnames = get_header_seqs(reader.header().clone());
+    let ref_id = seqnames.iter().position(|r| r == &seqname)?;
+    let region = process_variant(ref_id as u32, start);
+
+    let mut data = Vec::new();
+    let mut total = 0;
+    let mut err = 0;
+    let mut query = 0;
+    let mut reference = 0;
+    let mut other = 0;
+
+    for record in reader.fetch(&region).ok()? {
+        total += 1;
+        let readname = str::from_utf8(record.as_ref().unwrap().name()).ok()?;
+        if let Ok((cb, umi)) = get_cb(split.clone(), cb_len, readname.to_string(), record.as_ref().unwrap(), tags) {
+            let mut ins_result = SequenceMatch { still_to_check: variant.query_nt.len(), final_result: None };
+            let mut del_result = SequenceMatch { still_to_check: variant.ref_nt.len(), final_result: None };
+            for entry in record.as_ref().unwrap().alignment_entries().ok()? {
+                match class {
+                    VariantClass::Insertion => handle_insertion(entry, start, &variant, &mut ins_result, &mut query, &mut reference, &mut other),
+                    VariantClass::Deletion => handle_deletion(entry, start, &variant, &mut del_result, &mut query, &mut reference, &mut other),
+                    _ => continue,
+                }
+
+                if let Some(result) = ins_result.final_result.clone().or(del_result.final_result.clone()) {
+                    data.push(format!("{} {} {} {} {} {:?}", cb, umi, seqname, start, vname, result));
+                    break;
+                }
+            }
+        } else {
+            err += 1;
+        }
+    }
+
+    log_counts(total, vname, err, query, reference, other, verbose);
+
+    data.sort();
+    let mut out_vec = Vec::new();
+    for (count, record) in data.into_iter().dedup_with_count() {
+        out_vec.push(format!("{} {}\n", record, count).as_bytes().to_owned());
+    }
+
+    Some(out_vec)
+}
+
+fn handle_insertion(
+    entry: bam::record::AlignmentEntry,
+    start: u32,
+    variant: &Variant,
+    result: &mut SequenceMatch,
+    query: &mut usize,
+    reference: &mut usize,
+    other: &mut usize
+) {
+    if let Some((ref_pos, ref_nt)) = entry.ref_pos_nt() {
+        if ref_pos >= start - 1 {
+            if let Some((_record_pos, record_nt)) = entry.record_pos_nt() {
+                update_result(record_nt, ref_nt, &variant.query_nt, result, query, reference, other, entry.is_insertion());
+            }
+        }
     }
 }
+
+fn handle_deletion(
+    entry: bam::record::AlignmentEntry,
+    start: u32,
+    variant: &Variant,
+    result: &mut SequenceMatch,
+    query: &mut usize,
+    reference: &mut usize,
+    other: &mut usize
+) {
+    if let Some((ref_pos, ref_nt)) = entry.ref_pos_nt() {
+        if ref_pos >= start - 1 {
+            if let Some((_record_pos, record_nt)) = entry.record_pos_nt() {
+                update_result(record_nt, ref_nt, &variant.ref_nt, result, query, reference, other, entry.is_deletion());
+            }
+        }
+    }
+}
+
+fn update_result(
+    record_nt: u8,
+    ref_nt: u8,
+    variant_nt: &str,
+    result: &mut SequenceMatch,
+    query: &mut usize,
+    reference: &mut usize,
+    other: &mut usize,
+    is_indel: bool
+) {
+    if variant_nt.len() == result.still_to_check {
+        result.still_to_check -= 1;
+        if record_nt as char != ref_nt as char {
+            result.final_result = Some(MatchType::Other);
+            *other += 1;
+        }
+    } else if record_nt as char == variant_nt.chars().nth(variant_nt.len() - result.still_to_check).unwrap() && is_indel {
+        result.still_to_check -= 1;
+        if result.still_to_check == 0 {
+            result.final_result = Some(MatchType::Query);
+            *query += 1;
+        }
+    } else if record_nt as char == ref_nt as char && !is_indel {
+        result.still_to_check -= 1;
+        if result.still_to_check == 0 {
+            result.final_result = Some(MatchType::Ref);
+            *reference += 1;
+        }
+    } else {
+        result.still_to_check -= 1;
+        if result.still_to_check == 0 {
+            result.final_result = Some(MatchType::Other);
+            *other += 1;
+        }
+    }
+}
+
+fn log_counts(total: usize, vname: String, err: usize, query: usize, reference: usize, other: usize, verbose: bool) {
+    info!("\n\n\tFound {} reads spanning variant: {}!\n\tNumbers of errors: {}", total, vname, err);
+    if verbose {
+        eprintln!("Found {} reads spanning variant: {}!\n\tNumbers of errors: {}", total, vname, err);
+    }
+    info!("\t\t\tQuery: {}\n\t\t\tReference: {}\n\t\t\tOther: {}", query, reference, other);
+    if verbose {
+        eprintln!("\t\tQuery: {}\n\t\tReference: {}\n\t\tOther: {}", query, reference, other);
+    }
+}
+
+
+
+
+// fn count_variants_indel(ibam: Option<&str>, verbose: bool, cb_len: Option<usize>, variant: Variant, split: Option<String>, tags: Option<(&[u8], &[u8])>) -> Option<Vec<Vec<u8>>> {
+//     let ibam = ibam?;
+//     let seqname = variant.seq;
+//     let start = variant.start.parse::<u32>().unwrap();
+//     let vname = variant.name;
+
+//     let mut reader = bam::IndexedReader::build().from_path(&ibam).unwrap();
+//     let seqnames = get_header_seqs(reader.header().clone());
+//     let ref_id = seqnames.iter().position(|r| r == &seqname).unwrap();
+//     let region = process_variant(ref_id as u32, start);
+
+//     let mut data = Vec::new();
+//     let mut total = 0;
+//     let mut err = 0;
+//     let mut query = 0;
+//     let mut reference = 0;
+//     let mut other = 0;
+
+//     for record in reader.fetch(&region).unwrap() {
+//         total += 1;
+//         let readname = match str::from_utf8(record.as_ref().unwrap().name()) {
+//             Ok(v) => v,
+//             Err(e) => panic!("\n\n*******Invalid UTF-8 sequence: {}*******\n\n", e),
+//         };
+//         if let Ok((cb, umi)) = get_cb(split.clone(), cb_len, readname.to_string(), record.as_ref().unwrap(), tags) {
+//             let mut ins_result = SequenceMatch { still_to_check: variant.query_nt.len(), final_result: None };
+//             let mut del_result = SequenceMatch { still_to_check: variant.ref_nt.len(), final_result: None };
+//             let class = variant.class.clone().unwrap();
+//             for entry in record.as_ref().unwrap().alignment_entries().unwrap() {
+//                 if class == VariantClass::Insertion {
+//                     if let Some((ref_pos, ref_nt)) = entry.ref_pos_nt() {
+//                         if ref_pos >= start - 1 {
+//                             if let Some((_record_pos, record_nt)) = entry.record_pos_nt() {
+//                                 if variant.query_nt.len() == ins_result.still_to_check {
+//                                     ins_result.still_to_check -= 1;
+//                                     if record_nt as char != ref_nt as char {
+//                                         ins_result.final_result = Some(MatchType::Other);
+//                                         other += 1;
+//                                     }
+//                                 } else if record_nt as char == variant.query_nt.chars().nth(variant.query_nt.len() - ins_result.still_to_check).unwrap() && entry.is_insertion() {
+//                                     ins_result.still_to_check -= 1;
+//                                     if ins_result.still_to_check == 0 {
+//                                         ins_result.final_result = Some(MatchType::Query);
+//                                         query += 1;
+//                                     }
+//                                 } else if record_nt as char == ref_nt as char && !entry.is_insertion() {
+//                                     ins_result.still_to_check -= 1;
+//                                     if ins_result.still_to_check == 0 {
+//                                         ins_result.final_result = Some(MatchType::Ref);
+//                                         reference += 1;
+//                                     }
+//                                 } else {
+//                                     ins_result.still_to_check -= 1;
+//                                     if ins_result.still_to_check == 0 {
+//                                         ins_result.final_result = Some(MatchType::Other);
+//                                         other += 1;
+//                                     }
+//                                 }
+//                                 if ins_result.final_result.is_some() {
+//                                     data.push(format!("{} {} {} {} {} {:?}", cb, umi, seqname, start, vname, ins_result.final_result.clone().unwrap()));
+//                                     break;
+//                                 }
+//                             }
+//                         }
+//                     }
+//                 } else if let Some((ref_pos, ref_nt)) = entry.ref_pos_nt() {
+//                     if ref_pos >= start - 1 {
+//                         if let Some((_record_pos, record_nt)) = entry.record_pos_nt() {
+//                             if variant.ref_nt.len() == del_result.still_to_check {
+//                                 del_result.still_to_check -= 1;
+//                                 if record_nt as char != ref_nt as char {
+//                                     del_result.final_result = Some(MatchType::Other);
+//                                     other += 1;
+//                                 }
+//                             } else if record_nt as char == variant.ref_nt.chars().nth(variant.ref_nt.len() - del_result.still_to_check).unwrap() && entry.is_deletion() {
+//                                 del_result.still_to_check -= 1;
+//                                 if del_result.still_to_check == 0 {
+//                                     del_result.final_result = Some(MatchType::Query);
+//                                     query += 1;
+//                                 }
+//                             } else if record_nt as char == ref_nt as char && !entry.is_deletion() {
+//                                 del_result.still_to_check -= 1;
+//                                 if del_result.still_to_check == 0 {
+//                                     del_result.final_result = Some(MatchType::Ref);
+//                                     reference += 1;
+//                                 }
+//                             } else {
+//                                 del_result.still_to_check -= 1;
+//                                 if del_result.still_to_check == 0 {
+//                                     del_result.final_result = Some(MatchType::Other);
+//                                     other += 1;
+//                                 }
+//                             }
+//                             if del_result.final_result.is_some() {
+//                                 data.push(format!("{} {} {} {} {} {:?}", cb, umi, seqname, start, vname, del_result.final_result.clone().unwrap()));
+//                                 break;
+//                             }
+//                         }
+//                     }
+//                 }
+//             }
+//         } else {
+//             err += 1;
+//         }
+//     }
+
+//     info!("\n\n\tFound {} reads spanning variant: {}!\n\tNumbers of errors: {}", total, vname, err);
+//     if verbose {
+//         eprintln!("Found {} reads spanning variant: {}!\n\tNumbers of errors: {}", total, vname, err);
+//     }
+//     info!("\t\t\tQuery: {}\n\t\t\tReference: {}\n\t\t\tOther: {}", query, reference, other);
+//     if verbose {
+//         eprintln!("\t\tQuery: {}\n\t\tReference: {}\n\t\tOther: {}", query, reference, other);
+//     }
+
+//     data.sort();
+//     let mut out_vec = Vec::new();
+//     let cdata = data.into_iter().dedup_with_count();
+//     for (count, record) in cdata {
+//         let count_str = format!("{} {}\n", record, count);
+//         out_vec.push(count_str.as_bytes().to_owned());
+//     }
+//     Some(out_vec)
+// }
 
