@@ -333,6 +333,7 @@ fn count_variants_snv(
     split: Option<String>, 
     tags: Option<(&[u8], &[u8])>
 ) -> Option<Vec<Vec<u8>>> {
+    let debug = true;
     let ibam = ibam?;
     let seqname = variant.seq;
     let start = variant.start.parse::<u32>().ok()?;
@@ -362,18 +363,27 @@ fn count_variants_snv(
                         if let Some((_record_pos, record_nt)) = entry.record_pos_nt() {
                             let match_type = if record_nt as char == us_ref_nt && !entry.is_insertion() && !entry.is_deletion() {
                                 reference += 1;
+                                if debug{
+                                    eprintln!("reference nt = {}\n record_nt = {}\n ergo: reference", _ref_nt as char, record_nt as char);
+                                };
                                 MatchType::Ref
                             } else if record_nt as char == query_nt && !entry.is_insertion() && !entry.is_deletion() {
                                 query += 1;
+                                if debug{
+                                    eprintln!("reference nt = {}\n record_nt = {}\n ergo: query", _ref_nt as char, record_nt as char);
+                                };
                                 MatchType::Query
                             } else if record_nt == b'N' {
                                 err += 1;
                                 continue;
                             } else {
                                 other += 1;
+                                if debug{
+                                    eprintln!("reference nt = {}\n record_nt = {}\n ergo: Other", _ref_nt as char, record_nt as char);
+                                };
                                 MatchType::Other
                             };
-
+                            
                             data.push(format!("{} {} {} {} {} {:?}", cb, umi, seqname, start, vname, match_type));
                         }
                     }
