@@ -9,6 +9,7 @@ pub mod countbam;
 pub mod vcf;
 pub mod align;
 pub mod utils;
+pub mod fastq;
 
 use crate::mutcaller::mutcaller_run;
 use crate::countbam::countbam_run;
