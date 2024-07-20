@@ -242,10 +242,17 @@ loc=~/develop/mutCaller
 mutcaller VARIANTS -s $loc/tests/var.vcf.gz -q 98 -m variants_from_vcf.tsv -v
 ```
 
-##### Run ALIGNED on a bam file using VCF file filtered on 98
+##### Run ALIGNED on a minimap2 aligned bam file using VCF file filtered on 98
 ```sh
 loc=~/develop/mutCaller
 mutcaller ALIGNED -b $loc/tests/lr.bam -s $loc/tests/var.vcf.gz -q 98 -t 8 -o out_long
+```
+
+
+##### Run ALIGNED on a cellranger aligned bam file 
+```sh
+loc=~/develop/mutCaller
+mutcaller ALIGNED -b $loc/tests/ds_cellranger.bam -s $loc/tests/var.vcf.gz -q 98 -t 8 -o out_cr
 ```
 
 
