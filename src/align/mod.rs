@@ -23,14 +23,14 @@ use std::io::{Error as IoError, ErrorKind};
 #[cfg(not(feature = "paris"))]
 use log::*;
 
-#[derive(Deserialize, Clone, PartialEq)]
+#[derive(Deserialize, Clone, Debug, PartialEq)]
 pub struct Aligner {
     pub flavor: AlignerFlavor,
     pub loc: String,
     pub args: Option<Vec<String>>,
 }
 
-#[derive(Deserialize, Clone, PartialEq)]
+#[derive(Deserialize, Clone, Debug, PartialEq)]
 pub enum AlignerFlavor {
     Minimap2,
     STAR,

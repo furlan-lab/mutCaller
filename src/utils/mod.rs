@@ -6,10 +6,18 @@ use serde::Deserialize;
 use simplelog::info;
 use std::error::Error;
 use std::ffi::OsStr;
+use std::path::PathBuf;
 use std::fs::File;
+use std::env;
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use crate::mutcaller::{Paramsm, Variant, VariantClass};
+
+pub fn get_current_working_dir() -> std::io::Result<PathBuf> {
+    let cwd = env::current_dir();
+    cwd
+}
+
 
 pub fn writer_fn(count_vec: Vec<Vec<Vec<u8>>>, params: &Paramsm) -> Result<(), Box<dyn Error>> {
     let counts_path = params.output_path.join("counts.txt.gz");

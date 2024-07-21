@@ -19,8 +19,8 @@ use std::path::{Path, PathBuf};
 use std::str;
 use std::time::Instant;
 use crate::align::{align, Aligner, AlignerFlavor, test_progs};
-use crate::countbam::{Params, get_current_working_dir};
-use crate::utils::{read_csv, check_variants, classify_variant, writer_fn};
+use crate::countbam::Params;
+use crate::utils::{read_csv, check_variants, classify_variant, writer_fn, get_current_working_dir};
 use crate::vcf::{guess_vcf, guess_compression, read_vcf_compressed, read_vcf_uncompressed};
 use crate::fastq::fastq;
 
@@ -50,6 +50,7 @@ impl fmt::Display for Variant {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Paramsm {
     pub fastq1: String,
     pub fastq2: String,
@@ -117,6 +118,7 @@ fn load_params() -> Paramsm {
             std::process::exit(1);
         }
     };
+    
     return good_params
 }
 
@@ -126,10 +128,19 @@ fn check_params(params: Paramsm) -> Result<Paramsm, Box<dyn Error>> {
     let log_file_path = params.output_path.join("mutcaller.log");
     let log_file = log_file_path.to_str()
         .expect("Failed to convert log file path to string");
-
+    
     CombinedLogger::init(vec![
-        WriteLogger::new(LevelFilter::Info, Config::default(), File::create(log_file)?),
-    ])?;
+        #[cfg(not(feature = "termcolor"))]
+        WriteLogger::new(
+            LevelFilter::Info,
+            Config::default(),
+            File::create(log_file).unwrap(),
+        ),
+    ]).unwrap();
+
+    // CombinedLogger::init(vec![
+    //     WriteLogger::new(LevelFilter::Info, Config::default(), File::create(log_file)?),
+    // ])?;
 
     // Get current working directory
     let wdir = get_current_working_dir()?
@@ -138,7 +149,7 @@ fn check_params(params: Paramsm) -> Result<Paramsm, Box<dyn Error>> {
         .to_string();
 
     if params.verbose {
-        eprintln!("\n\nCurrent working directory: '{}'", wdir);
+        eprintln!("\n\nCurrent working directory: '{:?}'", wdir);
     }
 
     // Resolve absolute output path
@@ -189,6 +200,7 @@ fn check_params(params: Paramsm) -> Result<Paramsm, Box<dyn Error>> {
 
 
 pub fn mutcaller_run() {
+    // eprintln!("Running mutcaller");
     let start = Instant::now();
     let params = load_params();
     info!("\n\n\tParsing Parameters!\n");
@@ -346,7 +358,7 @@ fn count_variants_snv(
     split: Option<String>, 
     tags: Option<(&[u8], &[u8])>
 ) -> Option<Vec<Vec<u8>>> {
-    let debug = true;
+    let debug = false;
     let ibam = ibam?;
     let seqname = variant.seq;
     let start = variant.start.parse::<u32>().ok()?;
@@ -371,7 +383,7 @@ fn count_variants_snv(
         let readname = str::from_utf8(record.as_ref().unwrap().name()).ok()?;
         if let Ok((cb, umi)) = get_cb(split.clone(), cb_len, readname.to_string(), record.as_ref().unwrap(), tags) {
             for entry in record.as_ref().unwrap().alignment_entries().ok()? {
-                eprintln!("entry: {:?}", entry);
+                // eprintln!("entry: {:?}", entry);
                 if let Some((ref_pos, _ref_nt)) = entry.ref_pos_nt() {
                     if ref_pos == start - 1 {
                         if let Some((_record_pos, record_nt)) = entry.record_pos_nt() {

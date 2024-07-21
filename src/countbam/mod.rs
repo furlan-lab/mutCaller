@@ -13,7 +13,7 @@ extern crate rayon;
 
 
 use clap::{App, load_yaml};
-use std::{env, fs, path::Path, path::PathBuf};
+use std::{fs, path::Path};
 use std::error::Error;
 use csv::ReaderBuilder;
 use std::fs::File;
@@ -23,7 +23,7 @@ use std::time::Instant;
 use log::*;
 use simplelog::{Config, WriteLogger, CombinedLogger, LevelFilter};
 use crate::mutcaller::{Variant, count_variants_helper};
-use crate::utils::classify_variant;
+use crate::utils::{get_current_working_dir, classify_variant};
 use crate::vcf::{guess_vcf, guess_compression, read_vcf_compressed, read_vcf_uncompressed};
 use rayon::prelude::*;
 
@@ -263,7 +263,7 @@ pub fn writer_fn (count_vec: Vec<Vec<Vec<u8>>>, params: &Params) -> Result<(), B
         Ok(())
 }
 
-pub fn get_current_working_dir() -> std::io::Result<PathBuf> {
-    env::current_dir()
-}
+// pub fn get_current_working_dir() -> std::io::Result<PathBuf> {
+//     env::current_dir()
+// }
 
