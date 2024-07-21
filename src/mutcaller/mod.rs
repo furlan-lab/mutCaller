@@ -9,6 +9,7 @@ extern crate itertools;
 // use bam::record::tags;
 use clap::{App, load_yaml};
 use itertools::Itertools;
+use rayon::vec;
 use serde::Deserialize;
 use simplelog::{Config, WriteLogger, CombinedLogger, LevelFilter, info, warn};
 use std::error::Error;
@@ -294,7 +295,7 @@ pub fn count_variants_helper(paramsm: Option<&Paramsm>, params: Option<&Params>,
 
 fn fallback_count_variants(variant: &Variant, params: Option<&Params>) -> Vec<Vec<u8>> {
     warn!("\n\n\tFalling back to counting variants without an MD tag");
-    let result = match variant.class.clone().unwrap() {
+    let _result = match variant.class.clone().unwrap() {
         VariantClass::SNV => {
             let verbose = params.unwrap().verbose;
             let ibam_temp = params.unwrap().bam.to_string();
@@ -617,7 +618,7 @@ fn count_variants_snv_nomd(
     let ref_id = seqnames.iter().position(|r| r == &seqname)?;
     let region = process_variant(ref_id as u32, start);
 
-    let mut data = Vec::new();
+    let mut data: Vec<Vec<u8>> = Vec::new();
     let mut total = 0;
     let mut err = 0;
     let mut query = 0;
@@ -628,42 +629,8 @@ fn count_variants_snv_nomd(
         total += 1;
         let readname = str::from_utf8(record.as_ref().unwrap().name()).ok()?;
         if let Ok((cb, umi)) = get_cb(split.clone(), cb_len, readname.to_string(), record.as_ref().unwrap(), tags) {
-            for entry in record.as_ref().unwrap().alignment_entries().ok()? {
-                // eprintln!("entry: {:?}", entry);
-                if let Some((ref_pos, _ref_nt)) = entry.ref_pos_nt() {
-                    if ref_pos == start - 1 {
-                        if let Some((_record_pos, record_nt)) = entry.record_pos_nt() {
-                            let match_type = if record_nt as char == us_ref_nt && !entry.is_insertion() && !entry.is_deletion() {
-                                reference += 1;
-                                if debug{
-                                    eprintln!("reference nt = {}\n record_nt = {}\n ergo: reference", _ref_nt as char, record_nt as char);
-                                };
-                                MatchType::Ref
-                            } else if record_nt as char == query_nt && !entry.is_insertion() && !entry.is_deletion() {
-                                query += 1;
-                                if debug{
-                                    eprintln!("reference nt = {}\n record_nt = {}\n ergo: query", _ref_nt as char, record_nt as char);
-                                };
-                                MatchType::Query
-                            } else if record_nt == b'N' {
-                                err += 1;
-                                continue;
-                            } else {
-                                other += 1;
-                                if debug{
-                                    eprintln!("reference nt = {}\n record_nt = {}\n ergo: Other", _ref_nt as char, record_nt as char);
-                                };
-                                MatchType::Other
-                            };
-                            
-                            data.push(format!("{} {} {} {} {} {:?}", cb, umi, seqname, start, vname, match_type));
-                        }
-                    }
-                } else {
-                    err += 1;
-                    eprintln!("Error: Reference position not found");
-                }
-            }
+            eprintln!("record: {:?}", record);
+            // eprintln!("alignment entries: {:?}", record.unwrap().alignment_entries())
         } else {
             eprintln!("Error: Cell barcode / UMI not found");
             err += 1;
@@ -675,8 +642,8 @@ fn count_variants_snv_nomd(
     data.sort();
     let mut out_vec = Vec::new();
     for (count, record) in data.into_iter().dedup_with_count() {
-        out_vec.push(format!("{} {}\n", record, count).as_bytes().to_owned());
+        out_vec.push(format!("{:?} {}\n", record, count).as_bytes().to_owned());
     }
-
+    out_vec = vec![   "test".as_bytes().to_owned() ];
     Some(out_vec)
 }
