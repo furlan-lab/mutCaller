@@ -126,30 +126,12 @@ fn load_params() -> Paramsm {
 fn check_params(params: Paramsm) -> Result<Paramsm, Box<dyn Error>> {
     // Initialize logging
     let log_file_path = params.output_path.join("mutcaller.log");
-    let log_file = log_file_path.to_str()
-        .expect("Failed to convert log file path to string");
-    
-    CombinedLogger::init(vec![
-        #[cfg(not(feature = "termcolor"))]
-        WriteLogger::new(
-            LevelFilter::Info,
-            Config::default(),
-            File::create(log_file).unwrap(),
-        ),
-    ]).unwrap();
-
-    // CombinedLogger::init(vec![
-    //     WriteLogger::new(LevelFilter::Info, Config::default(), File::create(log_file)?),
-    // ])?;
-
+    let log_file = log_file_path.to_str().ok_or_else(|| IoError::new(ErrorKind::InvalidInput, "Failed to convert log file path to string"))?;
     // Get current working directory
-    let wdir = get_current_working_dir()?
-        .to_str()
-        .expect("Failed to convert working directory to string")
-        .to_string();
+    let wdir = get_current_working_dir()?.to_str().ok_or_else(|| IoError::new(ErrorKind::InvalidInput, "Failed to convert working directory to string"))?.to_string();
 
     if params.verbose {
-        eprintln!("\n\nCurrent working directory: '{:?}'", wdir);
+        eprintln!("\n\nCurrent working directory: '{}'", wdir);
     }
 
     // Resolve absolute output path
@@ -160,8 +142,7 @@ fn check_params(params: Paramsm) -> Result<Paramsm, Box<dyn Error>> {
     };
 
     // Convert output path to string
-    let abs_outpath_str = abs_outpath.to_str()
-        .expect("Failed to convert absolute output path to string");
+    let abs_outpath_str = abs_outpath.to_str().ok_or_else(|| IoError::new(ErrorKind::InvalidInput, "Failed to convert absolute output path to string"))?;
 
     // Check if output directory exists
     if abs_outpath.exists() {
@@ -185,12 +166,20 @@ fn check_params(params: Paramsm) -> Result<Paramsm, Box<dyn Error>> {
     // Check that genome file exists
     let genome_path = Path::new(&params.genome);
     if !genome_path.exists() {
-        let genome_path_str = genome_path.to_str()
-            .expect("Failed to convert genome path to string");
+        let genome_path_str = genome_path.to_str().ok_or_else(|| IoError::new(ErrorKind::InvalidInput, "Failed to convert genome path to string"))?;
         let msg = format!("Genome file '{}' does not exist", genome_path_str);
-        eprint!("Error: {}\n", msg);
+        eprintln!("Error: {}\n", msg);
         return Err(IoError::new(ErrorKind::NotFound, msg).into());
     }
+
+    CombinedLogger::init(vec![
+        #[cfg(not(feature = "termcolor"))]
+        WriteLogger::new(
+            LevelFilter::Info,
+            Config::default(),
+            File::create(log_file)?,
+        ),
+    ])?;
 
     Ok(Paramsm {
         vcf: is_vcf,
