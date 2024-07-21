@@ -218,8 +218,6 @@ pub fn countbam_run() {
     }
     
     let duration = start.elapsed();
-    info!("\n\n\tDone!!\n");
-    info!("\n\n\tTime elapsed is: {:?}\n", duration);
     if params.verbose{
         eprintln!("\n\nDone!!");
         eprintln!("\n\nTime elapsed is: {:?}", duration);

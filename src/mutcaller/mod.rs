@@ -6,6 +6,7 @@ extern crate serde;
 extern crate fastq;
 extern crate itertools;
 
+// use bam::record::tags;
 use clap::{App, load_yaml};
 use itertools::Itertools;
 use serde::Deserialize;
@@ -258,14 +259,25 @@ pub fn count_variants_helper(paramsm: Option<&Paramsm>, params: Option<&Params>,
         VariantClass::SNV => {
             let verbose = paramsm.map_or_else(|| params.unwrap().verbose, |p| p.verbose);
             let cb_len = paramsm.map_or_else(|| None, |p| Some(p.cb_len));
-            let ibam_temp = paramsm.map_or_else(|| None, |p| Some(p.output_path.join("Aligned.sortedByCoord.out.bam").to_str().unwrap().to_string()));
-            count_variants_snv(ibam_temp.as_deref(), verbose, cb_len, variant.clone(), Some("|BARCODE=".to_string()), None)
+            let ibam_temp = paramsm.map_or_else(|| Some(params.unwrap().bam.to_string()), |p| Some(p.output_path.join("Aligned.sortedByCoord.out.bam").to_str().unwrap().to_string()));
+            let tags = params.map_or_else(|| None, |p| Some((p.cb_tag.as_bytes(), p.umi_tag.as_bytes())));
+            if tags.is_none() {
+                count_variants_snv(ibam_temp.as_deref(), verbose, cb_len, variant.clone(), Some("|BARCODE=".to_string()), None)
+            } else {
+                count_variants_snv(ibam_temp.as_deref(), verbose, cb_len, variant.clone(), None, tags)
+            }
+
         }
         VariantClass::Deletion | VariantClass::Insertion => {
             let verbose = paramsm.map_or_else(|| params.unwrap().verbose, |p| p.verbose);
             let cb_len = paramsm.map_or_else(|| None, |p| Some(p.cb_len));
-            let ibam_temp = paramsm.map_or_else(|| None, |p| Some(p.output_path.join("Aligned.sortedByCoord.out.bam").to_str().unwrap().to_string()));
-            count_variants_indel(ibam_temp.as_deref(), verbose, cb_len, variant.clone(), Some("|BARCODE=".to_string()), None)
+            let ibam_temp = paramsm.map_or_else(|| Some(params.unwrap().bam.to_string()), |p| Some(p.output_path.join("Aligned.sortedByCoord.out.bam").to_str().unwrap().to_string()));
+            let tags = params.map_or_else(|| None, |p| Some((p.cb_tag.as_bytes(), p.umi_tag.as_bytes())));
+            if tags.is_none() {
+                count_variants_indel(ibam_temp.as_deref(), verbose, cb_len, variant.clone(), Some("|BARCODE=".to_string()), None)
+            } else {
+                count_variants_indel(ibam_temp.as_deref(), verbose, cb_len, variant.clone(), None, tags)
+            }
         }
         _ => {
             warn!("\n\n\tVariant type {:?} not currently supported", variant.class.as_ref().unwrap());
@@ -289,6 +301,7 @@ fn string_pop(slice: &[u8]) -> &[u8; 2] {
 
 fn get_cb(split: Option<String>, cb_len: Option<usize>, readname: String, record: &bam::Record, tags: Option<(&[u8], &[u8])>) -> Result<(String, String), IoError> {
     // let barcode_error = IoError::new(ErrorKind::Other, "Cell barcode / UMI not found");
+    // eprintln!("split: {:?}, cb_len: {:?}, readname: {:?}, record: {:?}, tags: {:?}", split, cb_len, readname, record, tags);
     if let Some(split_str) = split {
         let cbumi = readname.split(&split_str).nth(1).ok_or_else(|| IoError::new(ErrorKind::Other, "Cell barcode / UMI not found"))?;
         let (cb, umi) = cbumi.split_at(cb_len.unwrap() + 1);
@@ -358,6 +371,7 @@ fn count_variants_snv(
         let readname = str::from_utf8(record.as_ref().unwrap().name()).ok()?;
         if let Ok((cb, umi)) = get_cb(split.clone(), cb_len, readname.to_string(), record.as_ref().unwrap(), tags) {
             for entry in record.as_ref().unwrap().alignment_entries().ok()? {
+                eprintln!("entry: {:?}", entry);
                 if let Some((ref_pos, _ref_nt)) = entry.ref_pos_nt() {
                     if ref_pos == start - 1 {
                         if let Some((_record_pos, record_nt)) = entry.record_pos_nt() {
@@ -390,6 +404,7 @@ fn count_variants_snv(
                 }
             }
         } else {
+            eprintln!("Error: Cell barcode / UMI not found");
             err += 1;
         }
     }
