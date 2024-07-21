@@ -238,7 +238,7 @@ pub fn mutcaller_run() {
     let _ar = align(&params);
 
     let count_vec: Vec<_> = checked_and_classified_variants.into_iter()
-        .filter_map(|variant| Some(count_variants_helper(Some(&params), None, variant.clone()).unwrap_or_else(|| fallback_count_variants(&variant))))
+        .filter_map(|variant| Some(count_variants_helper(Some(&params), None, variant.clone())?))
         .collect();
 
     let _none = writer_fn(count_vec, &params);
@@ -289,11 +289,39 @@ pub fn count_variants_helper(paramsm: Option<&Paramsm>, params: Option<&Params>,
         }
     };
 
-    result.or_else(|| Some(fallback_count_variants(&variant)))
+    result.or_else(|| Some(fallback_count_variants(&variant, params)))
 }
 
-fn fallback_count_variants(_variant: &Variant) -> Vec<Vec<u8>> {
-    vec![b"fallback data".to_vec()]
+fn fallback_count_variants(variant: &Variant, params: Option<&Params>) -> Vec<Vec<u8>> {
+    warn!("\n\n\tFalling back to counting variants without an MD tag");
+    let result = match variant.class.clone().unwrap() {
+        VariantClass::SNV => {
+            let verbose = params.unwrap().verbose;
+            let ibam_temp = params.unwrap().bam.to_string();
+            let tags = params.map_or_else(|| None, |p| Some((p.cb_tag.as_bytes(), p.umi_tag.as_bytes())));
+            count_variants_snv_nomd(Some(&ibam_temp), verbose, None, variant.clone(), None, tags)
+        }
+        // VariantClass::Deletion | VariantClass::Insertion => {
+        //     let verbose = paramsm.map_or_else(|| params.unwrap().verbose, |p| p.verbose);
+        //     let cb_len = paramsm.map_or_else(|| None, |p| Some(p.cb_len));
+        //     let ibam_temp = paramsm.map_or_else(|| Some(params.unwrap().bam.to_string()), |p| Some(p.output_path.join("Aligned.sortedByCoord.out.bam").to_str().unwrap().to_string()));
+        //     let tags = params.map_or_else(|| None, |p| Some((p.cb_tag.as_bytes(), p.umi_tag.as_bytes())));
+        //     if tags.is_none() {
+        //         count_variants_indel(ibam_temp.as_deref(), verbose, cb_len, variant.clone(), Some("|BARCODE=".to_string()), None)
+        //     } else {
+        //         count_variants_indel(ibam_temp.as_deref(), verbose, cb_len, variant.clone(), None, tags)
+        //     }
+        // }
+        _ => {
+            warn!("\n\n\tVariant type {:?} not currently supported", variant.class.as_ref().unwrap());
+            if params.unwrap().verbose {
+                eprintln!("\n\n\tVariant type {:?} not currently supported", variant.class.clone().unwrap());
+            }
+            None
+        }
+        
+    };
+    vec![   "test".as_bytes().to_owned() ]
 }
 
 fn string_pop(slice: &[u8]) -> &[u8; 2] {
@@ -405,7 +433,7 @@ fn count_variants_snv(
                 }
             }
         } else {
-            eprintln!("Error: Cell barcode / UMI not found");
+            // eprintln!("Error: Cell barcode / UMI not found");
             err += 1;
         }
     }
@@ -564,4 +592,91 @@ fn log_counts(total: usize, vname: String, err: usize, query: usize, reference: 
     if verbose {
         eprintln!("\t\tQuery: {}\n\t\tReference: {}\n\t\tOther: {}", query, reference, other);
     }
+}
+
+
+
+fn count_variants_snv_nomd(
+    ibam: Option<&str>, 
+    verbose: bool, 
+    cb_len: Option<usize>, 
+    variant: Variant, 
+    split: Option<String>, 
+    tags: Option<(&[u8], &[u8])>
+) -> Option<Vec<Vec<u8>>> {
+    let debug = false;
+    let ibam = ibam?;
+    let seqname = variant.seq;
+    let start = variant.start.parse::<u32>().ok()?;
+    let vname = variant.name;
+    let query_nt = variant.query_nt.chars().next()?;
+    let us_ref_nt = variant.ref_nt.chars().next()?;
+
+    let mut reader = bam::IndexedReader::build().from_path(&ibam).ok()?;
+    let seqnames = get_header_seqs(reader.header().clone());
+    let ref_id = seqnames.iter().position(|r| r == &seqname)?;
+    let region = process_variant(ref_id as u32, start);
+
+    let mut data = Vec::new();
+    let mut total = 0;
+    let mut err = 0;
+    let mut query = 0;
+    let mut reference = 0;
+    let mut other = 0;
+
+    for record in reader.fetch(&region).ok()? {
+        total += 1;
+        let readname = str::from_utf8(record.as_ref().unwrap().name()).ok()?;
+        if let Ok((cb, umi)) = get_cb(split.clone(), cb_len, readname.to_string(), record.as_ref().unwrap(), tags) {
+            for entry in record.as_ref().unwrap().alignment_entries().ok()? {
+                // eprintln!("entry: {:?}", entry);
+                if let Some((ref_pos, _ref_nt)) = entry.ref_pos_nt() {
+                    if ref_pos == start - 1 {
+                        if let Some((_record_pos, record_nt)) = entry.record_pos_nt() {
+                            let match_type = if record_nt as char == us_ref_nt && !entry.is_insertion() && !entry.is_deletion() {
+                                reference += 1;
+                                if debug{
+                                    eprintln!("reference nt = {}\n record_nt = {}\n ergo: reference", _ref_nt as char, record_nt as char);
+                                };
+                                MatchType::Ref
+                            } else if record_nt as char == query_nt && !entry.is_insertion() && !entry.is_deletion() {
+                                query += 1;
+                                if debug{
+                                    eprintln!("reference nt = {}\n record_nt = {}\n ergo: query", _ref_nt as char, record_nt as char);
+                                };
+                                MatchType::Query
+                            } else if record_nt == b'N' {
+                                err += 1;
+                                continue;
+                            } else {
+                                other += 1;
+                                if debug{
+                                    eprintln!("reference nt = {}\n record_nt = {}\n ergo: Other", _ref_nt as char, record_nt as char);
+                                };
+                                MatchType::Other
+                            };
+                            
+                            data.push(format!("{} {} {} {} {} {:?}", cb, umi, seqname, start, vname, match_type));
+                        }
+                    }
+                } else {
+                    err += 1;
+                    eprintln!("Error: Reference position not found");
+                }
+            }
+        } else {
+            eprintln!("Error: Cell barcode / UMI not found");
+            err += 1;
+        }
+    }
+
+    log_counts(total, vname, err, query, reference, other, verbose);
+
+    data.sort();
+    let mut out_vec = Vec::new();
+    for (count, record) in data.into_iter().dedup_with_count() {
+        out_vec.push(format!("{} {}\n", record, count).as_bytes().to_owned());
+    }
+
+    Some(out_vec)
 }
