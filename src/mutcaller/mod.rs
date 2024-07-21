@@ -5,11 +5,13 @@ extern crate bam;
 extern crate serde;
 extern crate fastq;
 extern crate itertools;
+extern crate rust_htslib;
 
 // use bam::record::tags;
 use clap::{App, load_yaml};
 use itertools::Itertools;
 use rayon::vec;
+use rust_htslib::bam::Read;
 use serde::Deserialize;
 use simplelog::{Config, WriteLogger, CombinedLogger, LevelFilter, info, warn};
 use std::error::Error;
@@ -605,6 +607,7 @@ fn count_variants_snv_nomd(
     split: Option<String>, 
     tags: Option<(&[u8], &[u8])>
 ) -> Option<Vec<Vec<u8>>> {
+    use rust_htslib::bam;
     let debug = false;
     let ibam = ibam?;
     let seqname = variant.seq;
@@ -613,8 +616,9 @@ fn count_variants_snv_nomd(
     let query_nt = variant.query_nt.chars().next()?;
     let us_ref_nt = variant.ref_nt.chars().next()?;
 
-    let mut reader = bam::IndexedReader::build().from_path(&ibam).ok()?;
-    let seqnames = get_header_seqs(reader.header().clone());
+    let mut reader = bam::IndexedReader::from_path(&ibam).ok()?;
+    let seqnames = reader.header().target_names().iter().map(|seq| str::from_utf8(*seq).unwrap().to_string()).collect::<Vec<_>>();
+    // let seqnames = get_header_seqs(reader.header().clone());
     let ref_id = seqnames.iter().position(|r| r == &seqname)?;
     let region = process_variant(ref_id as u32, start);
 

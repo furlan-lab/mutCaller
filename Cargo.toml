@@ -28,7 +28,8 @@ log = "0.4"
 vcf = "0.6.1"
 simplelog = { version = "0.11.0", features = ["paris"] }
 rlimit = "0.9.1"
-paris = "1.5" 
+paris = "1.5"
+rust-htslib = "0.47.0"
 
 
 [[bin]]
