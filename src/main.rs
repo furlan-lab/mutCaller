@@ -16,7 +16,6 @@ use crate::countbam::countbam_run;
 use crate::vcf::{read_vcf_compressed, read_vcf_uncompressed, guess_vcf, guess_compression, variants_writer_fn};
 use crate::utils::read_csv;
 use clap::{ArgMatches, AppSettings};
-// use itertools::Itertools;
 
 fn main() -> Result<(), io::Error> {
     let os_error = IoError::new(ErrorKind::Other, "Windows not supported");
