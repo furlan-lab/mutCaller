@@ -10,7 +10,8 @@ extern crate rust_htslib;
 // use bam::record::tags;
 use clap::{App, load_yaml};
 use itertools::Itertools;
-use rayon::vec;
+// use rust_htslib::bam::record::Seq;
+// use rayon::vec;
 use rust_htslib::bam::Read;
 use serde::Deserialize;
 use simplelog::{Config, WriteLogger, CombinedLogger, LevelFilter, info, warn};
@@ -297,7 +298,7 @@ pub fn count_variants_helper(paramsm: Option<&Paramsm>, params: Option<&Params>,
 
 fn fallback_count_variants(variant: &Variant, params: Option<&Params>) -> Vec<Vec<u8>> {
     warn!("\n\n\tFalling back to counting variants without an MD tag");
-    let _result = match variant.class.clone().unwrap() {
+    let result = match variant.class.clone().unwrap() {
         VariantClass::SNV => {
             let verbose = params.unwrap().verbose;
             let ibam_temp = params.unwrap().bam.to_string();
@@ -322,9 +323,9 @@ fn fallback_count_variants(variant: &Variant, params: Option<&Params>) -> Vec<Ve
             }
             None
         }
-        
     };
-    vec![   "test".as_bytes().to_owned() ]
+    result.unwrap()
+    // vec![   "test".as_bytes().to_owned() ]
 }
 
 fn string_pop(slice: &[u8]) -> &[u8; 2] {
@@ -598,56 +599,104 @@ fn log_counts(total: usize, vname: String, err: usize, query: usize, reference: 
 }
 
 
-
 fn count_variants_snv_nomd(
     ibam: Option<&str>, 
     verbose: bool, 
-    cb_len: Option<usize>, 
+    _cb_len: Option<usize>, 
     variant: Variant, 
-    split: Option<String>, 
+    _split: Option<String>, 
     tags: Option<(&[u8], &[u8])>
 ) -> Option<Vec<Vec<u8>>> {
     use rust_htslib::bam;
-    let debug = false;
+    use rust_htslib::bam::record::Aux;
+    use rust_htslib::bam::ext::BamRecordExtensions;
+    // use rust_htslib::bam::IndexedReader;
+    // let debug = false;
     let ibam = ibam?;
     let seqname = variant.seq;
     let start = variant.start.parse::<u32>().ok()?;
     let vname = variant.name;
     let query_nt = variant.query_nt.chars().next()?;
-    let us_ref_nt = variant.ref_nt.chars().next()?;
-
+    let ref_nt = variant.ref_nt.chars().next()?;
     let mut reader = bam::IndexedReader::from_path(&ibam).ok()?;
-    let seqnames = reader.header().target_names().iter().map(|seq| str::from_utf8(*seq).unwrap().to_string()).collect::<Vec<_>>();
-    // let seqnames = get_header_seqs(reader.header().clone());
-    let ref_id = seqnames.iter().position(|r| r == &seqname)?;
-    let region = process_variant(ref_id as u32, start);
-
     let mut data: Vec<Vec<u8>> = Vec::new();
     let mut total = 0;
     let mut err = 0;
     let mut query = 0;
     let mut reference = 0;
     let mut other = 0;
+    let _ = reader.fetch((&seqname, start, start +1));
 
-    for record in reader.fetch(&region).ok()? {
+
+    for record in reader.records(){
         total += 1;
-        let readname = str::from_utf8(record.as_ref().unwrap().name()).ok()?;
-        if let Ok((cb, umi)) = get_cb(split.clone(), cb_len, readname.to_string(), record.as_ref().unwrap(), tags) {
-            eprintln!("record: {:?}", record);
-            // eprintln!("alignment entries: {:?}", record.unwrap().alignment_entries())
-        } else {
-            eprintln!("Error: Cell barcode / UMI not found");
-            err += 1;
+        let record = record.ok()?;
+        let tag_0 = tags.unwrap().0;
+        let tag_1 = tags.unwrap().1;
+        let cb:String = match record.aux(tag_0) {
+            Ok(value) => {
+                if let Aux::String(v) = value {
+                    v.to_string()
+                } else {
+                    "CB_error".to_string()
+                }
+            }
+            Err(e) => {
+                warn!("Error reading tag: {:?} - {:?}", tag_0, e);
+                err += 1;
+                continue;
+            }
+        };
+        let umi:String = match record.aux(tag_1) {
+            Ok(value) => {
+                if let Aux::String(v) = value {
+                    v.to_string()
+                } else {
+                    "UMI_error".to_string()
+                }
+            }
+            Err(e) => {
+                warn!("Error reading tag: {:?} - {:?}", tag_1, e);
+                err += 1;
+                continue;
+            }
+        };
+        let mut result: Option<MatchType> = None;
+        for stuff in BamRecordExtensions::aligned_pairs_full(&record){
+            if stuff[1] == Some(start as i64){
+                result = match_base(&record, stuff[0], &mut query, &mut reference, &mut other, query_nt, ref_nt);
+            }
         }
+        // let result = MatchType::Query;
+        data.push(format!("{} {} {} {} {} {:?}", cb, umi, seqname, start, vname, result.unwrap()).into());
     }
+
 
     log_counts(total, vname, err, query, reference, other, verbose);
 
     data.sort();
     let mut out_vec = Vec::new();
-    for (count, record) in data.into_iter().dedup_with_count() {
-        out_vec.push(format!("{:?} {}\n", record, count).as_bytes().to_owned());
+    for (count, entry) in data.into_iter().dedup_with_count() {
+        out_vec.push(format!("{} {}\n", String::from_utf8(entry).unwrap(), count).as_bytes().to_owned());
     }
-    out_vec = vec![   "test".as_bytes().to_owned() ];
+    // out_vec = vec![   "test".as_bytes().to_owned() ];
     Some(out_vec)
+}
+
+fn match_base(record: &rust_htslib::bam::Record, pos: Option<i64>, query: &mut usize, reference: &mut usize, other: &mut usize, query_nt: char, ref_nt: char) -> Option<MatchType> {
+    // let seq: String = String::from_utf8(record.seq().as_bytes()).unwrap();
+    let record_nt = record.seq()[pos.unwrap() as usize] as char;
+    // let query_nt = variant.query_nt.chars().next().unwrap();
+    // let ref_nt = variant.ref_nt.chars().next().unwrap();
+    let match_type = if record_nt == ref_nt{
+        *reference += 1;
+        MatchType::Ref
+    } else if record_nt == query_nt{
+        *query += 1;
+        MatchType::Query
+    } else {
+        *other += 1;
+        MatchType::Other
+    };
+    Some(match_type)
 }

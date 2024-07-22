@@ -251,8 +251,9 @@ mutcaller ALIGNED -b $loc/tests/lr.bam -s $loc/tests/var.vcf.gz -q 98 -t 8 -o ou
 
 ##### Run ALIGNED on a cellranger aligned bam file 
 ```sh
+# sed 's/,/\t/g' $loc/tests/cr_var.csv > $loc/tests/cr_var.tsv
 loc=~/develop/mutCaller
-mutcaller ALIGNED -b $loc/tests/ds_cellranger.bam -s $loc/tests/cr_var.tsv -t 1 -u UB -o out_cr
+mutcaller ALIGNED -b $loc/tests/ds_cellranger.bam -s $loc/tests/cr_var.tsv -v -t 1 -u UB -o out_cr
 ```
 
 
