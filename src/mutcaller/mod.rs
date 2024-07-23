@@ -667,8 +667,12 @@ fn count_variants_snv_nomd(
                 result = match_base(&record, stuff[0], &mut query, &mut reference, &mut other, query_nt, ref_nt);
             }
         }
-        // let result = MatchType::Query;
-        data.push(format!("{} {} {} {} {} {:?}", cb, umi, seqname, start, vname, result.unwrap()).into());
+        if result.is_none(){
+            err += 1;
+            continue
+        } else {
+            data.push(format!("{} {} {} {} {} {:?}", cb, umi, seqname, start, vname, result.unwrap()).into());
+        }
     }
 
 
@@ -685,6 +689,11 @@ fn count_variants_snv_nomd(
 
 fn match_base(record: &rust_htslib::bam::Record, pos: Option<i64>, query: &mut usize, reference: &mut usize, other: &mut usize, query_nt: char, ref_nt: char) -> Option<MatchType> {
     // let seq: String = String::from_utf8(record.seq().as_bytes()).unwrap();
+    
+    // eprintln!("record: {:?}", record);
+    if pos.is_none(){
+        return None
+    }
     let record_nt = record.seq()[pos.unwrap() as usize] as char;
     // let query_nt = variant.query_nt.chars().next().unwrap();
     // let ref_nt = variant.ref_nt.chars().next().unwrap();

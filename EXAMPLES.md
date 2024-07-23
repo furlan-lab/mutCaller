@@ -253,7 +253,7 @@ mutcaller ALIGNED -b $loc/tests/lr.bam -s $loc/tests/var.vcf.gz -q 98 -t 8 -o ou
 ```sh
 # sed 's/,/\t/g' $loc/tests/cr_var.csv > $loc/tests/cr_var.tsv
 loc=~/develop/mutCaller
-mutcaller ALIGNED -b $loc/tests/ds_cellranger.bam -s $loc/tests/cr_var.tsv -v -t 1 -u UB -o out_cr
+mutcaller ALIGNED -b $loc/tests/nras.bam -s $loc/tests/cr_var.tsv -v -t 1 -u UB -o out_cr
 ```
 
 
@@ -277,8 +277,6 @@ loc=~/develop/mutCaller # or location where you have cloned the repository
 cd $loc
 cargo build --release && cp target/release/mutcaller ~/.local/bin
 mutcaller ARGPARSE --arg1="--scoreDelOpen 0 --scoreDelBase 0 --scoreInsOpen 0 --scoreInsBase 0 --seedSearchStartLmax 20 --winAnchorMultimapNmax 200 --seedMultimapNmax 100000" --arg2="--some_other_stuff stuff"
-
-
 ```
 
 
