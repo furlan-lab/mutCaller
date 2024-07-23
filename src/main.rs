@@ -13,7 +13,7 @@ pub mod fastq;
 
 use crate::mutcaller::mutcaller_run;
 use crate::countbam::countbam_run;
-use crate::vcf::{read_vcf_compressed, read_vcf_uncompressed, guess_vcf, guess_compression, variants_writer_fn};
+use crate::vcf::{read_vcf_compressed, read_vcf_uncompressed, guess_vcf, guess_compression, variants_writer_fn, check_variants_run, faidx};
 use crate::utils::read_csv;
 use clap::{ArgMatches, AppSettings};
 
@@ -43,6 +43,12 @@ fn main() -> Result<(), io::Error> {
 	}
 	if let Some(_params) = params.subcommand_matches("ALIGNED") {
     	countbam_run()
+	}
+    if let Some(_params) = params.subcommand_matches("CHECKVARIANTS") {
+    	check_variants_run()
+	}
+    if let Some(_params) = params.subcommand_matches("FAIDX") {
+    	faidx()
 	}
     if let Some(params) = params.subcommand_matches("VARIANTS") {
         let qual = params.value_of("qual").unwrap_or("95.0");

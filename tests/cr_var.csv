@@ -1,4 +1,0 @@
-seq,start,ref_nt,query_nt,name
-chr1,40861621,C,T,test_ref1
-chr1,40861622,T,A,test_query1
-chr1,40861623,T,A,test_other1

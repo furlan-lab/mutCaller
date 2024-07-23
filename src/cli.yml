@@ -3,6 +3,32 @@ version: "0.8.0"
 author: Scott Furlan
 about: Single nucleotide variant counting pipeline for single cell genomics data
 subcommands:
+    - FAIDX:
+        name: "FAIDX"
+        about: "build fasta index"
+        args:
+            - genome:
+                long: genome
+                short: g
+                takes_value: true
+                required: true
+                help: fasta file; will create a file with the same name as the fasta file with a .fai extension
+    - CHECKVARIANTS:
+        name: "CHECKVARIANTS"
+        about: "check that reference NT in a variants file matches the reference genome"
+        args:
+            - genome:
+                long: genome
+                short: g
+                takes_value: true
+                required: true
+                help: fasta file
+            - variants:
+                long: variants
+                short: s
+                takes_value: true
+                required: true
+                help: path to variants.tsv or vcf file; For tsv, example formating = seqname\tstart\tref_nt\tquery_nt\tname; e.g. chr12,112450407,A,G,PTPN11_227A>G
     - ARGPARSE:
         name: "ARGPARSE"
         about: "test arg parsing"

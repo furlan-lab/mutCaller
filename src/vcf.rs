@@ -10,9 +10,69 @@ use flate2::Compression;
 use std::fs::File;
 use std::io::{BufReader, BufRead};
 use crate::mutcaller::Variant;
+use crate::utils::classify_variant;
 use std::path::Path;
 use std::error::Error;
 use std::io::Write;
+use rust_htslib::faidx::build;
+use clap::{App, load_yaml};
+use csv::ReaderBuilder;
+
+
+pub fn faidx() {
+    let yaml = load_yaml!("cli.yml");
+    let matches = App::from_yaml(yaml).get_matches();
+    let faidx_params = matches.subcommand_matches("FAIDX").unwrap();
+    let fasta = faidx_params.value_of("genome").unwrap().to_string();
+    eprintln!("Building fasta index for {}\n", fasta);
+    let path = std::path::PathBuf::from(fasta);
+    build(&path).expect("Failed to build fasta index");
+}
+
+pub fn check_variants_run() {
+    let yaml = load_yaml!("cli.yml");
+    let matches = App::from_yaml(yaml).get_matches();
+    let cv_params = matches.subcommand_matches("CHECKVARIANTS").unwrap();
+    let fasta = cv_params.value_of("genome").unwrap().to_string();
+    let variantstring = cv_params.value_of("variants").unwrap().to_string();
+    let mut classified_variants = Vec::new();
+    let csvdata = read_csv(variantstring).unwrap();
+    for variant in csvdata {
+        let classified_variant = classify_variant(&variant);
+        // eprintln!("Correctly parsed and classified variant: {}\n\n", classified_variant.as_ref().unwrap());
+        classified_variants.push(classified_variant.unwrap());
+    }
+    let path = std::path::PathBuf::from(fasta);
+    // build(&path).expect("Failed to build fasta index");
+    let reader = rust_htslib::faidx::Reader::from_path(path).expect("Failed to open faidx");
+    // assert_eq!(reader.seq_names(), Ok(vec!["chr1".to_string(), "chr2".to_string(), "chr3".to_string()]));
+    for variant in classified_variants {
+        let seq = reader.fetch_seq_string(&variant.seq, variant.start.parse::<usize>().unwrap(), variant.start.parse::<usize>().unwrap()).unwrap();
+        if seq == variant.ref_nt && variant.query_nt != variant.ref_nt {
+            eprintln!("Correctly parsed, classified, and checked variant against reference genome: {}\n", variant);
+        } else {
+            eprintln!("Error in parsing, classifying, and checking variant against reference genome: {}\n", variant);
+        }
+        // eprintln!("Correctly parsed, classified, and checked variant against reference genome: {}\n", variant);
+        // eprintln!("Found reference sequence: {} at position {} on {} \n", seq, variant.start, &variant.seq);
+    }
+}
+
+fn read_csv(variantstring: String) -> Result<Vec<Variant>, Box<dyn Error>> {
+    eprintln!("Opening variants file: {}\n", &variantstring);
+    let file = File::open(variantstring).unwrap();
+    let reader = BufReader::new(file);
+    let mut rdr = ReaderBuilder::new()
+        .has_headers(true)
+        .delimiter(b'\t')
+        .from_reader(reader);
+    let mut csvdata = Vec::new();
+    for result in rdr.deserialize() {
+        let record: Variant = result?;
+        csvdata.push(record);
+    }
+    Ok(csvdata)
+}
 
 
 pub fn guess_vcf(file: &String) -> Result<bool, VCFError>{

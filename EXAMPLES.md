@@ -270,6 +270,23 @@ mutcaller UNALIGNED -v -t 1 -g $fa -b $bc -s $loc/tests/variants_indel.tsv -o ou
           -j $loc/tests/indel_R2.fastq.gz
 ```
 
+##### Build fasta index
+```sh
+fa=/Users/sfurlan/refs/genome.fa 
+mutcaller FAIDX -g $fa
+```
+
+
+##### Check Variants
+```sh
+loc=~/develop/mutCaller
+fa=/Users/sfurlan/refs/genome.fa 
+var=$loc/tests/cr_var.tsv
+mutcaller CHECKVARIANTS -g $fa -s $var
+```
+
+
+
 ##### Test argument parsing
 
 ```sh
