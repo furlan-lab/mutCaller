@@ -618,6 +618,7 @@ fn count_variants_snv_nomd(
     let vname = variant.name;
     let query_nt = variant.query_nt.chars().next()?;
     let ref_nt = variant.ref_nt.chars().next()?;
+    // let debug = true;
     let mut reader = bam::IndexedReader::from_path(&ibam).ok()?;
     let mut data: Vec<Vec<u8>> = Vec::new();
     let mut total = 0;
@@ -625,12 +626,18 @@ fn count_variants_snv_nomd(
     let mut query = 0;
     let mut reference = 0;
     let mut other = 0;
-    let _ = reader.fetch((&seqname, start, start +1));
+    let _ = reader.fetch((&seqname, start - 1, start + 1));
 
 
     for record in reader.records(){
         total += 1;
+
         let record = record.ok()?;
+        // if debug && total < 10{
+        //     eprintln!("record name: {:?}/n", String::from_utf8_lossy(record.qname()));
+        //     eprintln!("record seq: {}/n", String::from_utf8(record.seq().as_bytes()).unwrap());
+        //     eprintln!("record cigar: {:?}/n", record.cigar());
+        // }
         let tag_0 = tags.unwrap().0;
         let tag_1 = tags.unwrap().1;
         let cb:String = match record.aux(tag_0) {
@@ -665,10 +672,20 @@ fn count_variants_snv_nomd(
         for stuff in BamRecordExtensions::aligned_pairs_full(&record){
             if stuff[1] == Some(start as i64){
                 result = match_base(&record, stuff[0], &mut query, &mut reference, &mut other, query_nt, ref_nt);
+                // if debug {
+                //     eprintln!("read#: {}; record_nt: {}; result: {:?}", total, record.seq()[stuff[0].unwrap() as usize] as char, result);        
+                // }
             }
         }
         if result.is_none(){
-            err += 1;
+            // err += 1;
+            // if debug {
+            //         eprintln!("*****ERROR*****");
+            //         eprintln!("\t\trecord name: {:?}/n", String::from_utf8_lossy(record.qname()));
+            //         eprintln!("\t\rrecord seq: {}/n", String::from_utf8(record.seq().as_bytes()).unwrap());
+            //         eprintln!("\t\trecord cigar: {:?}/n", record.cigar());
+            //         // eprintln!("\t\tread#: {}; record_nt: {}; result: {:?}", total, record.seq()[stuff[0].unwrap() as usize] as char, result);        
+            // }
             continue
         } else {
             data.push(format!("{} {} {} {} {} {:?}", cb, umi, seqname, start, vname, result.unwrap()).into());

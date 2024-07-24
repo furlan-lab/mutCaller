@@ -51,7 +51,8 @@ pub fn check_variants_run() {
         if seq == variant.ref_nt && variant.query_nt != variant.ref_nt {
             eprintln!("Correctly parsed, classified, and checked variant against reference genome: {}\n", variant);
         } else {
-            eprintln!("Error in parsing, classifying, and checking variant against reference genome: {}\n", variant);
+            eprintln!("***** Error in parsing, classifying, and checking variant against reference genome: {}*****\n", variant);
+            eprintln!("***** ref_nt passed: {} query nt passed: {} actual ref_nt: {}*****\n", variant.ref_nt, variant.query_nt, seq);
         }
         // eprintln!("Correctly parsed, classified, and checked variant against reference genome: {}\n", variant);
         // eprintln!("Found reference sequence: {} at position {} on {} \n", seq, variant.start, &variant.seq);

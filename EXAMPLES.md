@@ -3,6 +3,9 @@
 
 #                       mutCaller working examples
 
+
+## Remember that mutcaller uses 0-indexed coordinates!!
+
 ##### Build mutCaller and install binary
 
 ```sh
@@ -254,6 +257,36 @@ mutcaller ALIGNED -b $loc/tests/lr.bam -s $loc/tests/var.vcf.gz -q 98 -t 8 -o ou
 # sed 's/,/\t/g' $loc/tests/cr_var.csv > $loc/tests/cr_var.tsv
 loc=~/develop/mutCaller
 mutcaller ALIGNED -b $loc/tests/nras.bam -s $loc/tests/cr_var.tsv -v -t 1 -u UB -o out_cr
+mutcaller ALIGNED -b $loc/tests/nras.bam -s $loc/tests/cr_var2.tsv -v -t 1 -u UB -o out_cr
+
+cat > tests/qnames.txt << EOL
+LH00266:65:22GKLTLT3:5:1155:52196:28510
+LH00266:65:22GKLTLT3:7:2254:37310:25850
+LH00266:65:22GKLTLT3:4:1263:28498:5070
+LH00266:65:22GKLTLT3:5:2279:1268:4349
+EOL
+samtools view -N tests/qnames.txt -o tests/nras_subset.bam tests/nras.bam
+samtools index tests/nras_subset.bam
+
+mutcaller ALIGNED -b $loc/tests/nras_subset.bam -s $loc/tests/cr_var.tsv -v -t 1 -u UB -o out_cr
+
+
+cat > tests/error_reads.txt << EOL
+LH00266:65:22GKLTLT3:2:1258:36163:26844
+LH00266:65:22GKLTLT3:1:1181:22932:18272
+LH00266:65:22GKLTLT3:1:2174:21933:5326
+LH00266:65:22GKLTLT3:2:1286:11836:20996
+LH00266:65:22GKLTLT3:8:2173:36108:25210
+LH00266:65:22GKLTLT3:8:2173:36117:25226
+LH00266:65:22GKLTLT3:4:2288:39168:3948
+LH00266:65:22GKLTLT3:8:2289:28794:25578
+LH00266:65:22GKLTLT3:8:1205:9886:14347
+LH00266:65:22GKLTLT3:8:1205:9876:14363
+LH00266:65:22GKLTLT3:3:1223:31494:17247
+EOL
+samtools view -N tests/error_reads.txt -o tests/error_cr.bam tests/nras.bam
+samtools index tests/error_cr.bam
+
 ```
 
 
