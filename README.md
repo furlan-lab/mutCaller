@@ -19,6 +19,7 @@ To install mutCaller:
 5. move this binary elsewhere if desired (ideally somewhere referenced by your PATH environment variable - e.g. `~/.local/bin`)
 
 ### Updates
+- **version 0.7.2** - 5/11/26 - fixed a bug where ALIGNED runs with `-t > 1` silently dropped all counts (the parallel `par_chunks` branch never called `writer_fn`); fixed a panic in ALIGNED when a variant of an unsupported class (e.g. MNV) was encountered (`paramsm.unwrap()` on `None`) — unsupported variants now log a warning and are skipped; fixed `VARIANTS -m` always gzipping the output regardless of extension — now writes plain TSV unless the filename ends in `.gz`.
 - **version 0.7.0 7/24/23 - fixed a bug that caused panic in some reads that the bam library (https://gitlab.com/scfurl/bam) deemed as containing conflicts between MD tag and CIGAR string.  These panics have been adressed in v 0.1.6 of the bam library and are now a required version for mutCaller
 - **version 0.6.\*** - 6/27/23 - working parallel countbam (chunking large variants into num of cores)
 - **version 0.5.\*** - 6/19/23 - indels supported, major code cleanup, checks variants.tsv file to ensure ref_nt matches the reference (for UNALIGNED-minimap2 runs only); added feature for passing additional arguments to aligner; fixed a bug that alllwed reads with different seq and qual lengths to tank STAR.
