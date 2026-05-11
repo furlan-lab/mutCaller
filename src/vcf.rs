@@ -187,15 +187,24 @@ pub fn read_vcf_uncompressed(file: &String, qual: &f64, verbose: &bool) -> Resul
 
 pub fn variants_writer_fn (file: String, variants: Vec<Variant>) -> Result<(), Box<dyn Error>> {
         let f = File::create(file.clone())?;
-        let mut gz = GzBuilder::new()
-                        .filename(file)
-                        .write(f, Compression::default());
-        gz.write_all(format!("seq\tstart\tref_nt\tquery_nt\tname\n").as_bytes())?;
-        for variant in variants {
-                // gz.write_all(&variant)?;
-                gz.write(format!("{}\t{}\t{}\t{}\t{}\n", &variant.seq, &variant.start, &variant.ref_nt, &variant.query_nt, &variant.name).as_bytes())?;
+        let compress = Path::new(&file).extension().map_or(false, |e| e == "gz");
+        let header = format!("seq\tstart\tref_nt\tquery_nt\tname\n");
+        if compress {
+            let mut gz = GzBuilder::new()
+                            .filename(file)
+                            .write(f, Compression::default());
+            gz.write_all(header.as_bytes())?;
+            for variant in variants {
+                    gz.write_all(format!("{}\t{}\t{}\t{}\t{}\n", &variant.seq, &variant.start, &variant.ref_nt, &variant.query_nt, &variant.name).as_bytes())?;
+            }
+            gz.finish()?;
+        } else {
+            let mut w = f;
+            w.write_all(header.as_bytes())?;
+            for variant in variants {
+                    w.write_all(format!("{}\t{}\t{}\t{}\t{}\n", &variant.seq, &variant.start, &variant.ref_nt, &variant.query_nt, &variant.name).as_bytes())?;
+            }
         }
-        gz.finish()?;
         Ok(())
 }
 

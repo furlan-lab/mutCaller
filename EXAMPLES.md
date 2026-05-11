@@ -15,11 +15,11 @@ cargo build --release && cp $loc/target/release/mutcaller ~/.local/bin
 ##### Run UNALIGNED on short read fastqs using mm2
 Expected to run 1-3 minutes
 
-```sh
+```bash
 loc=~/develop/mutCaller # or location where you have cloned the repository
 bc=$loc/data/737K-august-2016.txt.gz  #barcode whitelist
 fa=/Users/sfurlan/refs/genome.fa #genome location i.e. GRCh38
-#fa=/fh/fast/furlan_s/grp/refs/GRCh38/refdata-gex-GRCh38-2020-A/fasta/genome.fa
+
 mutcaller UNALIGNED -v -t 8 -g $fa -b $bc -s $loc/tests/variants.tsv -o out_mm2 \
           -i $loc/tests/sequencer_R1.fastq.gz \
           -j $loc/tests/sequencer_R2.fastq.gz
@@ -275,6 +275,3 @@ mutcaller ARGPARSE --arg1="--scoreDelOpen 0 --scoreDelBase 0 --scoreInsOpen 0 --
 
 
 ## THANKS FOR TRYING mutCaller!!
-
-
-

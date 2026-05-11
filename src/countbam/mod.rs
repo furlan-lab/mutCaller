@@ -215,6 +215,8 @@ pub fn countbam_run() {
         let chunk_iter = variants.par_chunks(params.threads)
                                 .map(|vec_variants_chunk| count_helper(&params, vec_variants_chunk.to_vec()));
         chunk_iter.collect_into_vec(&mut count_vec);
+        let flat: Vec<Vec<Vec<u8>>> = count_vec.into_iter().flatten().collect();
+        let _none = writer_fn(flat, &params);
     }
     
     let duration = start.elapsed();
@@ -240,7 +242,9 @@ fn count_helper (params: &Params, csvdata: Vec<Variant>) -> Vec<Vec<Vec<u8>>>{
                 eprintln!("\nProcessing variant: {}", variant);
                 eprintln!("\nOpening bam: {}", &params.bam);
             }
-            count_vec.push(count_variants_helper(None, Some(&params), classified_variant.unwrap()).unwrap());
+            if let Some(counts) = count_variants_helper(None, Some(&params), classified_variant.unwrap()) {
+                count_vec.push(counts);
+            }
         }
     return count_vec
 }

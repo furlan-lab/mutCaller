@@ -951,7 +951,8 @@ pub fn count_variants_helper(paramsm: Option<&Paramsm>, params: Option<&Params>,
             }
         }
         warn!("\n\n\tVariant type {:?} not currently supported", variant.class.as_ref().unwrap());
-       if paramsm.unwrap().verbose {
+        let verbose = paramsm.map(|p| p.verbose).or_else(|| params.map(|p| p.verbose)).unwrap_or(false);
+        if verbose {
             eprintln!("\n\n\tVariant type {:?} not currently supported", variant.class.unwrap());
         }
         return None
